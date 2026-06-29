@@ -1,0 +1,30 @@
+name: bci_preprocessing
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python
+  - python=3.11
+
+  # Core scientific stack
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+
+  # EEG / BCI
+  - mne
+  - scikit-learn
+
+  # Jupyter optional, aber praktisch zum Testen
+  - jupyterlab
+  - ipykernel
+
+  # File handling
+  - h5py
+
+  # Pip-only packages
+  - pip
+  - pip:
+      - mne-icalabel
