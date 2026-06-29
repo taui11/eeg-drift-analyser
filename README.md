@@ -5,14 +5,16 @@ Based on [Kostoglou & Müller-Putz (2026)](https://doi.org/10.1371/journal.pcbi.
 
 **TL;DR:** Take any EEG frequency band, check if the instantaneous frequency drifts over the course of a recording. The paper says mu speeds up over motor cortex and alpha slows down elsewhere. We replicate this in Python and make it work for arbitrary bands.
 
-## Questions
-- Pipeline with reporting like schwammerlRohr?
-- for multiple bands or just one at a time?
-- correlation to alpha/mu change?
-- use just Hilbert or also EKF as a reference/correlation?
-- just Schalk2004 or general use?
-- beta is mentioned in the paper should we correlate with that?
-- do we also need to analyse/discuss or just the pipeline/data?
+## Assignments
+- Clean data
+- no need for resampling (160Hz)
+- Highpass filtering (0.5Hz) (Bandpass?)
+- remove 60Hz with Notch filter
+- screenshot of 1 Subjects (frontal) ICA. Include, which should be eliminated. Before and After(???)
+- With the clean data; Bandpass for alpha, theta(4-7Hz), mu(8-12Hz) and beta(13-30Hz)
+- Correlate Bands to eachother
+- generally show correlation of magnitude and frequency w.r.t time
+- ### No generalization needed 
 
 ## Data
 
