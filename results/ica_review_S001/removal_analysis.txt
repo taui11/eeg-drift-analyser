@@ -1,22 +1,22 @@
 remove:
-    -IC000 (97% eye)
-    -IC022 (69% eye)
-    -IC031 (71% muscle)
-    -IC032 (54% eye)
-    -IC040 (49% eye but not sure if it has to be removed)
-    -IC054 (85% muscle)
-    -IC048 (92% muscle but very strange for muscle artifact but how keep? threshold wont work)
+    -IC000 (96% eye)
+    -IC015 (74% eye)
+    -IC029 (69% muscle)
+    -IC035 (52% eye)
+    -IC042 (92% muscle strong dipole but low power with high variance)
+    -IC045 (66% eye)
+    -IC049 (85% muscle high variance in power)
 
 strange but keep:
-    -IC001 (78% hear beat? probably remove but not sure if it is necessary)
-    -IC018 (same strange rectangle as before)
-    -IC035 (61% muscle dipole but power not extremly high in high frequency)
-    -IC039 (39% muscle strange but only low probability so keep)
-    -IC045 (37% brain mirror image of IC039)
-    -IC046 (46% brain same as 39 and 45)
-    -IC055 (45% muscle strange could be eye)
+    -IC003 (34% could be eye but definetly keep)
+    -IC016 (same strange rectangle as before)
+    -IC034 (62% muscle)
+    -IC036 (36% muscle)
+    -IC040 (54% muscle)
+    -IC050 (59% channel noise to wide of a circle to be one channel)
+    -IC052 (30% muscle strange could be eye)
 
 Thresholds assesed with data from S001:
-    -eye           removal at >50% -> depending on decision of IC040
-    -muscle        removal at >71%
-    -channel noise removal at >95% -> non above 61% in S001 but with knowledge from before, channel noise detection isnt that good below 90%
+    -eye           removal at >50%
+    -muscle        removal at >69%
+    -channel noise removal at >95% -> non above 69% in S001 but with knowledge from before, channel noise detection isnt that good below 90%
