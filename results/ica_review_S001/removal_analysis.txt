@@ -1,0 +1,23 @@
+remove:
+    -IC000 (99% eye)
+    -IC001 (96% eye)
+    -IC018 (39% eye)
+    -IC023 (75% muscle)
+    -IC028 (75% eye)
+    -IC030 (86% eye)
+    -IC039 (87% muscle very high vairance in power)
+    -IC045 (90% muscle very similar to IC046 but hard to filter out such outliers)
+
+strange but keep:
+    -IC010 (very strange but low power so keep)
+    -IC024 (other but keep)
+    -IC031 (I think i would keep 47% muscle)
+    -IC042 (59% muscle)
+    -IC046 (40% muscle hard but variance is lower that IC045)
+    -IC050 (87% channel noise but could be brain spread out to much for one channel)
+
+
+Thresholds assesed with data from S001:
+    -eye           removal at >39%
+    -muscle        removal at >75%
+    -channel noise removal at >90% maybe even higher 95%?
