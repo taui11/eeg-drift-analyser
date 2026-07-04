@@ -76,8 +76,9 @@ def load_subject_s001():
 
 def fit_ica(raw: mne.io.BaseRaw):
     ica = ICA(
-        n_components=None,  # all components (rank ~63 after average-ref), not just top variance
-        method="fastica",
+        n_components=None,  # all available components, not just top variance
+        method="picard",
+        fit_params=dict(ortho=False, extended=True),
         random_state=RANDOM_STATE,
         max_iter="auto",
     )

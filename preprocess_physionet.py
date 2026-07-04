@@ -138,7 +138,8 @@ def remove_ica_artifacts(raw: mne.io.BaseRaw, random_state: int = 43):
 
     ica = ICA(
         n_components=0.99,
-        method="fastica",
+        method="picard",
+        fit_params=dict(ortho=False, extended=True),
         random_state=random_state,
         max_iter="auto"
     )
