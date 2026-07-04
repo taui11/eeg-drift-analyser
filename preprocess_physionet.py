@@ -111,7 +111,6 @@ def preprocess_raw_before_ica(raw: mne.io.BaseRaw):
     Similar to the MATLAB preprocessing before ICA:
     - 60 Hz powerline removal
     - 0.5 Hz high-pass
-    - average reference
     """
     raw = raw.copy()
 
@@ -121,8 +120,6 @@ def preprocess_raw_before_ica(raw: mne.io.BaseRaw):
     data = highpass_filter(data, fs=raw.info["sfreq"], cutoff=0.5, order=4)
 
     raw._data = data
-
-    raw.set_eeg_reference("average", projection=False)
 
     return raw
 
