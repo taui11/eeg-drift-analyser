@@ -20,6 +20,8 @@ Based on [Kostoglou & Müller-Putz (2026)](https://doi.org/10.1371/journal.pcbi.
 
 [PhysioNet EEG Motor Movement/Imagery Database](https://physionet.org/content/eegmmidb/1.0.0/) — 109 subjects, 64 channels, 160 Hz, motor execution + imagery tasks.
 
+The EEG montage includes 64 electrodes from the international 10-10 system, excluding Nz, F9, F10, FT9, FT10, A1, A2, TP9, TP10, P9, and P10. Signal indices in the recordings are numbered from 0 to 63, while the associated montage figure numbers electrodes from 1 to 64.
+
 ## TODO
 
 ### Setup
