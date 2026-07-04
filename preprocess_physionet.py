@@ -1,5 +1,4 @@
 ######################################################
-# Non-invasive Brain-Computer Interfaces, KU [709.028]
 # MATLAB helpfun(i) translated to Python/MNE
 ######################################################
 
@@ -22,8 +21,9 @@ except ImportError:
 # Parameters
 # ----------------------------------------------------
 FS = 160
-PHYSIONET_ROOT = "/home/kkostoglou/Desktop/Fatigue/Physionet"
-OUTPUT_DIR = "."
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PHYSIONET_ROOT = os.path.join(SCRIPT_DIR, "full_data", "physionet.org", "files", "eegmmidb", "1.0.0")
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, "results")
 MONTAGE_NAME = "standard_1005"
 
 
@@ -59,6 +59,17 @@ def edf_file_path(subject_id: int, run: int, root: str = PHYSIONET_ROOT) -> str:
         filename = f"{folder}R{run}.edf"
 
     return os.path.join(root, folder, filename)
+
+
+def clean_channel_names(raw: mne.io.BaseRaw):
+    """
+    PhysioNet EDFs use trailing-dot channel names (e.g. "Fc5.", "Cz..").
+    set_montage's match_case=False only ignores case, not punctuation, so
+    without stripping the dots every channel silently fails to match the
+    montage and ends up with NaN positions (breaks topomaps/ICLabel).
+    """
+    raw.rename_channels(lambda name: name.strip("."))
+    return raw
 
 
 def highpass_filter(data: np.ndarray, fs: float, cutoff: float = 0.5, order: int = 4):
@@ -210,6 +221,7 @@ def helpfun_python(subject_id: int):
             print(f"Warning: Expected {FS} Hz, got {raw.info['sfreq']} Hz.")
 
         # Set montage if possible
+        clean_channel_names(raw)
         montage = mne.channels.make_standard_montage(MONTAGE_NAME)
         raw.set_montage(montage, match_case=False, on_missing="ignore")
 
@@ -229,6 +241,7 @@ def helpfun_python(subject_id: int):
 
     DATA = raw_clean.get_data()
 
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_path = os.path.join(OUTPUT_DIR, f"DATA{subject_id}.mat")
 
     savemat(
