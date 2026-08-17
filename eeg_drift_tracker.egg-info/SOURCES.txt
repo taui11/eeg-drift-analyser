@@ -1,0 +1,16 @@
+pyproject.toml
+eeg_drift/__init__.py
+eeg_drift/bids_convert.py
+eeg_drift/drift.py
+eeg_drift/features.py
+eeg_drift/io.py
+eeg_drift/preprocess.py
+eeg_drift/qc.py
+eeg_drift/report_text.py
+eeg_drift/stats.py
+eeg_drift/viz.py
+eeg_drift_tracker.egg-info/PKG-INFO
+eeg_drift_tracker.egg-info/SOURCES.txt
+eeg_drift_tracker.egg-info/dependency_links.txt
+eeg_drift_tracker.egg-info/requires.txt
+eeg_drift_tracker.egg-info/top_level.txt

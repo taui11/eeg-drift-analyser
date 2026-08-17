@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: eeg-drift-tracker
+Version: 0.1.0
+Requires-Python: >=3.10
+Requires-Dist: mne
+Requires-Dist: mne-bids
+Requires-Dist: mne-icalabel
+Requires-Dist: scipy
+Requires-Dist: statsmodels
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: pyyaml

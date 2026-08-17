@@ -6,7 +6,9 @@ some root path - not on how that tree was produced.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
+from typing import cast
 
 import mne
 from mne_bids import BIDSPath, read_raw_bids
@@ -29,8 +31,11 @@ def load_subject_raw(
 
 def list_subjects(bids_root: Path) -> list[str]:
     """Return sorted subject IDs (without 'sub-' prefix) found in a BIDS tree."""
-    # TODO: glob bids_root for sub-* directories
-    raise NotImplementedError
+    return sorted(
+        p.name.removeprefix("sub-")
+        for p in Path(bids_root).glob("sub-*")
+        if p.is_dir()
+    )
 
 
 def concatenate_subject_runs(
@@ -39,6 +44,23 @@ def concatenate_subject_runs(
     task: str,
     runs: list[str],
 ) -> mne.io.BaseRaw:
-    """Load and concatenate multiple runs for one subject into one continuous Raw."""
-    # TODO: load_subject_raw per run, mne.concatenate_raws
-    raise NotImplementedError
+    """
+    Load and concatenate multiple runs for one subject into one continuous
+    Raw. Runs missing from the BIDS tree are skipped with a warning rather
+    than failing the whole subject, matching the reference MATLAB
+    helpfun(i)'s "missing file, skip" behaviour.
+    """
+    raws = []
+    for run in runs:
+        try:
+            raws.append(load_subject_raw(bids_root, subject, task, run))
+        except FileNotFoundError:
+            warnings.warn(f"sub-{subject} run-{run} (task-{task}) not found under {bids_root}, skipping.")
+
+    if not raws:
+        raise FileNotFoundError(f"No runs found for subject {subject} under {bids_root}")
+
+    # concatenate_raws only returns a (raw, events) tuple when events_list is
+    # passed; we never do, so this is always a plain Raw at runtime, but
+    # mne's stubs aren't precise enough for the type checker to narrow that.
+    return cast(mne.io.BaseRaw, mne.concatenate_raws(raws))

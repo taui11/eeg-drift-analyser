@@ -1,0 +1,9 @@
+mne
+mne-bids
+mne-icalabel
+scipy
+statsmodels
+numpy
+pandas
+matplotlib
+pyyaml
