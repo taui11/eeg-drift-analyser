@@ -15,9 +15,9 @@ from mne.preprocessing import ICA
 # 0.95 line noise). Update these once derive_thresholds.py has run against
 # our own manually-labeled components.
 ICLABEL_THRESHOLDS = {
-    "eye blink": 0.48,
-    "muscle artifact": 0.77,
-    "line noise": 0.95,
+    "eye blink": 0.50,          # supervisor: >50%, can go as low as 30% if needed
+    "muscle artifact": 0.69,    # supervisor: >69% (not 0.77/0.90 — final call after discussion)
+    "channel noise": 0.95,      # supervisor: >95% (detection unreliable below 90%)
 }
 
 
