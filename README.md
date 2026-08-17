@@ -12,6 +12,52 @@
 > is actually valid BIDS (`bids-validator`) before you trust it.
 >
 > Ping me once `data/bids/` exists so I can start on preprocessing.
+>
+> **Prompt for Claude Code / Copilot** — paste this in to get started:
+>
+> ```
+> We're building eeg-drift-tracker, a pipeline measuring within-session
+> frequency drift in EEG bands (PhysioNet EEG Motor Movement/Imagery DB,
+> 109 subjects, 64 channels, 160 Hz, 14 EDF runs/subject: R01 rest-eyes-
+> open, R02 rest-eyes-closed, R03-R14 motor execution/imagery tasks).
+>
+> My teammate has already implemented everything downstream of BIDS:
+> - eeg_drift/preprocess.py — notch/high-pass filter, Picard ICA, ICLabel
+>   rejection (preprocess_subject(raw) -> (clean_raw, ica))
+> - eeg_drift/io.py — list_subjects(bids_root), concatenate_subject_runs(
+>   bids_root, subject, task, runs) -> Raw (loads via mne_bids.read_raw_bids)
+> - scripts/run_preprocess.py — CLI that loops subjects, preprocesses,
+>   saves cleaned .fif to data/derivatives/, writes
+>   results/qc/qc_summary.csv
+>
+> Everything downstream ONLY depends on a valid BIDS tree existing at
+> data/bids/ - it doesn't care how it got there. That's my part.
+>
+> My job: eeg_drift/bids_convert.py's convert_dataset(raw_dir, bids_root)
+> - the batch loop over PhysioNet's raw layout (data/raw/S001/S001R01.edf
+> ... S109/S109R14.edf) into a BIDS tree, and wiring
+> scripts/run_bids_convert.py (argparse) to call it.
+>
+> Already implemented for me, reuse it:
+> convert_file_to_bids(raw_path, bids_root, subject, task, run) -> BIDSPath
+> - handles one file, skips if already converted, writes via
+> mne_bids.write_raw_bids(..., format="EDF") (needs the edfio package -
+> already in pyproject.toml).
+>
+> IMPORTANT - task/run naming isn't finalized yet. run_preprocess.py
+> currently assumes, as an unconfirmed placeholder:
+>   task = "motorimagery", runs = "01".."14" (zero-padded)
+> Either match that convention exactly, or if you pick something else,
+> update DEFAULT_TASK/DEFAULT_RUNS at the top of scripts/run_preprocess.py
+> to match and tell me.
+>
+> Usable subjects only (skip the rest - corrupted/wrong sample rate per
+> the reference MATLAB code):
+> [1:32, 35, 36, 38, 39, 40:60, 62:71, 73, 75:78, 80:88, 90:92, 94:100, 100:109]
+>
+> Validate the output is real BIDS (bids-validator data/bids) before
+> trusting it - don't just eyeball the folder structure.
+> ```
 
 
 # eeg-drift-analyser
