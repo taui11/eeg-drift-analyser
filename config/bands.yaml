@@ -1,0 +1,23 @@
+mu:
+  fmin: 8
+  fmax: 12
+  filter_order: 4
+  smooth_window_ms: 100
+
+alpha:
+  fmin: 8
+  fmax: 13
+  filter_order: 4
+  smooth_window_ms: 100
+
+theta:
+  fmin: 4
+  fmax: 8
+  filter_order: 4
+  smooth_window_ms: 100
+
+beta:
+  fmin: 13
+  fmax: 30
+  filter_order: 4
+  smooth_window_ms: 100

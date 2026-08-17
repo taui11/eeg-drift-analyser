@@ -1,0 +1,18 @@
+[project]
+name = "eeg-drift-tracker"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "mne",
+    "mne-bids",
+    "mne-icalabel",
+    "scipy",
+    "statsmodels",
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "pyyaml",
+]
+
+[tool.setuptools.packages.find]
+include = ["eeg_drift*"]
