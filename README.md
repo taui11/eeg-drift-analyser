@@ -1,3 +1,19 @@
+> ## 🚨 @Spyros — YOUR PART: `eeg_drift/bids_convert.py`
+>
+> `convert_dataset()` is still `raise NotImplementedError` — that's the
+> batch loop over `data/raw/` → `data/bids/`, wired up via
+> `scripts/run_bids_convert.py` with argparse (your call on the flags).
+>
+> `convert_file_to_bids()` (single file) is already done, use it as the
+> building block.
+>
+> **Use AI / dark magic for this** — Claude Code, Copilot, whatever, this
+> part is pure plumbing and not worth doing by hand. Just check the output
+> is actually valid BIDS (`bids-validator`) before you trust it.
+>
+> Ping me once `data/bids/` exists so I can start on preprocessing.
+
+
 # eeg-drift-analyser
 
 Seminar project — detecting within-session frequency drift in EEG bands.  
