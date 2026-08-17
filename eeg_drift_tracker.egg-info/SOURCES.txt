@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 eeg_drift/__init__.py
 eeg_drift/bids_convert.py

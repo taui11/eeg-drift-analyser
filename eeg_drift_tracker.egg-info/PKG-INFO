@@ -5,6 +5,9 @@ Requires-Python: >=3.10
 Requires-Dist: mne
 Requires-Dist: mne-bids
 Requires-Dist: mne-icalabel
+Requires-Dist: python-picard
+Requires-Dist: edfio
+Requires-Dist: onnxruntime
 Requires-Dist: scipy
 Requires-Dist: statsmodels
 Requires-Dist: numpy

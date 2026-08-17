@@ -1,6 +1,9 @@
 mne
 mne-bids
 mne-icalabel
+python-picard
+edfio
+onnxruntime
 scipy
 statsmodels
 numpy
