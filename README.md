@@ -11,7 +11,13 @@
 > part is pure plumbing and not worth doing by hand. Just check the output
 > is actually valid BIDS (`bids-validator`) before you trust it.
 >
-> Ping me once `data/bids/` exists so I can start on preprocessing.
+> **Status update:** everything downstream of BIDS is now fully
+> implemented AND has been run end-to-end on a real subject (S001) —
+> preprocessing → drift analysis → per-subject report → group report all
+> work cleanly. The moment `data/bids/` has real subjects in it, the whole
+> chain just runs, nothing else needed from me. Ping me once it exists —
+> or earlier if you hit the task/run naming question below, since that one
+> can actually break things downstream if it's wrong.
 >
 > **Prompt for Claude Code / Copilot** — paste this in to get started:
 >
@@ -21,14 +27,30 @@
 > 109 subjects, 64 channels, 160 Hz, 14 EDF runs/subject: R01 rest-eyes-
 > open, R02 rest-eyes-closed, R03-R14 motor execution/imagery tasks).
 >
-> My teammate has already implemented everything downstream of BIDS:
+> My teammate has already implemented EVERYTHING downstream of BIDS:
 > - eeg_drift/preprocess.py — notch/high-pass filter, Picard ICA, ICLabel
 >   rejection (preprocess_subject(raw) -> (clean_raw, ica))
 > - eeg_drift/io.py — list_subjects(bids_root), concatenate_subject_runs(
 >   bids_root, subject, task, runs) -> Raw (loads via mne_bids.read_raw_bids)
-> - scripts/run_preprocess.py — CLI that loops subjects, preprocesses,
->   saves cleaned .fif to data/derivatives/, writes
->   results/qc/qc_summary.csv
+> - eeg_drift/features.py, drift.py, stats.py, viz.py, qc.py,
+>   report_text.py — bandpass+Hilbert feature extraction, robust
+>   per-channel slope regression, group t-test+FDR, topomaps/drift-trace
+>   plots, QC metrics, report text - all implemented
+> - scripts/run_preprocess.py — loops subjects, preprocesses, saves
+>   cleaned .fif to data/derivatives/, writes results/qc/qc_summary.csv
+> - scripts/run_drift_analysis.py — bandpass+Hilbert+slope per subject,
+>   for every band in config/bands.yaml (or one via --band); group stats
+>   + topomaps once >=2 subjects exist, a plain mean-slope topomap even
+>   for 1
+> - scripts/build_reports.py — one HTML QC+drift report per subject
+> - scripts/build_group_report.py — one combined HTML report across all
+>   processed subjects (the group-level counterpart)
+> - scripts/run_ica_review.py + derive_thresholds.py — manual ICA
+>   component labeling tool + ROC/Youden's-J threshold derivation from it
+>
+> This has already been run end-to-end on one real subject (S001) and
+> works cleanly - the moment data/bids/ has real subjects, the whole
+> chain just runs, no changes needed downstream.
 >
 > Everything downstream ONLY depends on a valid BIDS tree existing at
 > data/bids/ - it doesn't care how it got there. That's my part.
@@ -41,15 +63,21 @@
 > Already implemented for me, reuse it:
 > convert_file_to_bids(raw_path, bids_root, subject, task, run) -> BIDSPath
 > - handles one file, skips if already converted, writes via
-> mne_bids.write_raw_bids(..., format="EDF") (needs the edfio package -
-> already in pyproject.toml).
+> mne_bids.write_raw_bids(..., format="EDF").
 >
-> IMPORTANT - task/run naming isn't finalized yet. run_preprocess.py
-> currently assumes, as an unconfirmed placeholder:
+> Dependencies (mne, mne-bids, mne-icalabel, python-picard, edfio,
+> onnxruntime, scikit-learn) are all already declared in pyproject.toml -
+> `pip install -e .` in your env covers everything, nothing extra needed
+> just for BIDS conversion.
+>
+> IMPORTANT - task/run naming isn't finalized yet. scripts/run_preprocess.py
+> and scripts/run_drift_analysis.py currently assume, as an unconfirmed
+> placeholder used for testing so far:
 >   task = "motorimagery", runs = "01".."14" (zero-padded)
 > Either match that convention exactly, or if you pick something else,
 > update DEFAULT_TASK/DEFAULT_RUNS at the top of scripts/run_preprocess.py
-> to match and tell me.
+> to match and tell me - this is the one thing that will actually break
+> the downstream pipeline if it's wrong.
 >
 > Usable subjects only (skip the rest - corrupted/wrong sample rate per
 > the reference MATLAB code):

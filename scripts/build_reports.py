@@ -22,13 +22,11 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from eeg_drift.drift import analysis_window_seconds, fit_drift_slope
+from eeg_drift.drift import TRACE_DECIMATE_HZ, analysis_window_seconds, fit_drift_slope
 from eeg_drift.features import bandpass_filter, instantaneous_frequency, smooth_moving_average
 from eeg_drift.qc import flag_outliers
 from eeg_drift.report_text import subject_summary_bullets
 from eeg_drift.viz import plot_inst_freq_traces
-
-DECIMATE_TO_HZ = 1.0  # matches drift.fit_drift_slope's default - trace and fit line stay consistent
 
 
 def _band_trace_figure(raw: mne.io.BaseRaw, band_name: str, band_cfg: dict):
@@ -44,14 +42,14 @@ def _band_trace_figure(raw: mne.io.BaseRaw, band_name: str, band_cfg: dict):
     window_samples = int(sfreq * band_cfg.get("smooth_window_ms", 100.0) / 1000.0)
     inst_freq = smooth_moving_average(inst_freq, window_samples)
 
-    step = max(1, int(round(sfreq / DECIMATE_TO_HZ)))
+    step = max(1, int(round(sfreq / TRACE_DECIMATE_HZ)))
     times_sec = raw.times[::step]
     inst_freq = inst_freq[:, ::step]
 
     traces, fits = {}, {}
     for i, ch in enumerate(channels):
         traces[ch] = inst_freq[i]
-        fits[ch] = fit_drift_slope(inst_freq[i], sfreq=DECIMATE_TO_HZ, decimate_to_hz=None)
+        fits[ch] = fit_drift_slope(inst_freq[i], sfreq=TRACE_DECIMATE_HZ, decimate_to_hz=None)
 
     return plot_inst_freq_traces(times_sec, traces, fits, band_name)
 
@@ -60,12 +58,21 @@ def build_subject_report(subject: str, qc_row: dict, deriv_root: Path, bands_cfg
     report = mne.Report(title=f"QC report - sub-{subject}")
 
     bullets = subject_summary_bullets(qc_row)
-    html = "<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>"
+    html = (
+        "<p>Automated preprocessing/artifact-rejection checks for this subject - "
+        "not a substitute for manual review, but flags anything worth a closer look.</p>"
+        "<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>"
+    )
     report.add_html(html, title="QC summary", tags=("qc",))
 
     fif_path = deriv_root / f"sub-{subject}_clean_raw.fif"
     if fif_path.exists():
         raw = mne.io.read_raw_fif(fif_path, preload=True, verbose=False)
+        report.add_html(
+            "<p>Power spectral density across all cleaned channels. The notch at 60 Hz confirms "
+            "the powerline filter worked; no full time series is shown (unreadable at 64 channels).</p>",
+            title="Cleaned data: what this shows", tags=("raw",),
+        )
         report.add_raw(raw, title="Cleaned data overview", psd=True, butterfly=False, tags=("raw",))
 
         tmin, tmax = analysis_window_seconds()
@@ -74,7 +81,14 @@ def build_subject_report(subject: str, qc_row: dict, deriv_root: Path, bands_cfg
             for band_name, band_cfg in bands_cfg.items():
                 fig = _band_trace_figure(raw_cropped, band_name, band_cfg)
                 if fig is not None:
-                    report.add_figure(fig, title=f"{band_name}: drift", tags=("drift", band_name))
+                    fmin, fmax = band_cfg["fmin"], band_cfg["fmax"]
+                    caption = (
+                        f"Instantaneous frequency ({fmin}-{fmax} Hz band, Hilbert transform) over the "
+                        f"analysis window for this band's representative channels. Thin lines are the "
+                        f"decimated trace; thick lines are the robust-regression drift fit, with slope "
+                        f"in Hz/hour in the legend."
+                    )
+                    report.add_figure(fig, title=f"{band_name}: drift", caption=caption, tags=("drift", band_name))
                     plt.close(fig)
         else:
             report.add_html(

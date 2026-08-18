@@ -6,8 +6,8 @@ group-level counterpart to build_reports.py's per-subject reports, mirroring
 what Kostoglou et al. report at the group level rather than per-subject.
 
 Needs scripts/run_drift_analysis.py to have already been run for the bands
-you want included (it writes results/drift/<band>/channel_stats.csv +
-topomap PNGs, which this script only reads).
+you want included (it writes results/drift/<band>/*.csv + topomap/trace
+PNGs, which this script only reads).
 
 Example:
     python scripts/build_group_report.py --qc results/qc/qc_summary.csv --drift-root results/drift --out reports/group_report.html
@@ -22,9 +22,19 @@ import yaml
 
 from eeg_drift.qc import flag_outliers
 
+CHANNEL_STATS_EXPLANATION = (
+    "<p>One-sample t-test of each channel's slope (Hz/hour) against 0 across subjects, "
+    "Benjamini-Hochberg FDR-corrected across channels (p_value_fdr). pct_positive is the "
+    "share of subjects with slope &gt; 0 (point estimate only, not a per-subject significance test).</p>"
+)
+
 
 def _qc_summary_html(qc_df: pd.DataFrame) -> str:
-    html = f"<p>{len(qc_df)} subject(s) processed.</p>"
+    html = (
+        "<p>Automated QC metrics per subject, with columns flagged (&lt;metric&gt;_outlier) "
+        "when a subject sits more than 2 standard deviations from the group mean on that metric.</p>"
+    )
+    html += f"<p>{len(qc_df)} subject(s) processed.</p>"
     html += qc_df.to_html(index=False, float_format=lambda x: f"{x:.3g}")
 
     if "any_outlier" in qc_df.columns:
@@ -37,21 +47,37 @@ def _qc_summary_html(qc_df: pd.DataFrame) -> str:
     return html
 
 
-def _band_section(band: str, drift_root: Path) -> tuple[str, list[Path]]:
-    band_dir = drift_root / band
+def _band_images(band: str, band_dir: Path) -> list[tuple[Path, str, str]]:
+    """Returns (path, title_suffix, caption) for whichever of this band's plots exist."""
+    candidates = [
+        (
+            "avg_inst_freq_trace.png", "group-average drift",
+            "Group-average instantaneous frequency per representative channel (mean trace across "
+            "all processed subjects), with a drift line fit directly to that averaged trace.",
+        ),
+        (
+            "mean_slope_topomap.png", "mean slope topomap",
+            "Average per-channel drift slope (Hz/hour) across subjects, all 64 channels. "
+            "Red = accelerating, blue = slowing.",
+        ),
+        (
+            "pct_positive_topomap.png", "% positive topomap",
+            "Percentage of subjects with a positive (accelerating) slope per channel "
+            "(point estimate only, see channel_stats table for the FDR-corrected group test).",
+        ),
+    ]
+    return [(band_dir / fname, title, caption) for fname, title, caption in candidates if (band_dir / fname).exists()]
+
+
+def _band_stats_html(band: str, band_dir: Path) -> str:
     stats_csv = band_dir / "channel_stats.csv"
     if not stats_csv.exists():
         return (
-            f"<p>No group channel_stats.csv for band '{band}' - run "
-            f"scripts/run_drift_analysis.py with &gt;=2 subjects first.</p>",
-            [],
+            "<p>No group channel_stats.csv for this band - run scripts/run_drift_analysis.py "
+            "with &gt;=2 subjects first (a single subject can't fit a t-test).</p>"
         )
-
     stats_df = pd.read_csv(stats_csv)
-    html = stats_df.to_html(index=False, float_format=lambda x: f"{x:.3g}")
-
-    images = [band_dir / name for name in ("mean_slope_topomap.png", "pct_positive_topomap.png")]
-    return html, [p for p in images if p.exists()]
+    return CHANNEL_STATS_EXPLANATION + stats_df.to_html(index=False, float_format=lambda x: f"{x:.3g}")
 
 
 def main():
@@ -78,10 +104,12 @@ def main():
     report.add_html(_qc_summary_html(qc_df), title="QC summary (all subjects)", tags=("qc",))
 
     for band in band_names:
-        html, images = _band_section(band, args.drift_root)
-        report.add_html(html, title=f"{band}: channel stats", tags=("drift", band))
-        for img_path in images:
-            report.add_image(img_path, title=f"{band}: {img_path.stem}", tags=("drift", band))
+        band_dir = args.drift_root / band
+
+        for img_path, title_suffix, caption in _band_images(band, band_dir):
+            report.add_image(img_path, title=f"{band}: {title_suffix}", caption=caption, tags=("drift", band))
+
+        report.add_html(_band_stats_html(band, band_dir), title=f"{band}: channel stats", tags=("drift", band))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     report.save(args.out, overwrite=True, open_browser=False, verbose=False)

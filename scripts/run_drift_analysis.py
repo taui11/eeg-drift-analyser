@@ -14,13 +14,18 @@ import csv
 import re
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import mne
+import numpy as np
 import yaml
 
-from eeg_drift.drift import analysis_window_seconds, fit_drift_slopes_all_channels
+from eeg_drift.drift import TRACE_DECIMATE_HZ, analysis_window_seconds, fit_drift_slope, fit_drift_slopes_all_channels
 from eeg_drift.features import extract_band_features
 from eeg_drift.stats import group_test_slopes
-from eeg_drift.viz import plot_pct_significant_topomap, plot_slope_topomap
+from eeg_drift.viz import plot_inst_freq_traces, plot_pct_significant_topomap, plot_slope_topomap
 
 SUBJECT_FILE_RE = re.compile(r"^sub-(?P<subject>.+)_clean_raw\.fif$")
 
@@ -42,6 +47,10 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
 def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     tmin, tmax = analysis_window_seconds()
+
+    trace_channels = [ch for ch in band_cfg.get("channels", [])]
+    trace_arrays: dict[str, list[np.ndarray]] = {ch: [] for ch in trace_channels}
+    times_sec_ref = None
 
     slopes_by_subject: dict[str, dict[str, float]] = {}
     last_info = None  # assumes a consistent 64-ch montage across subjects (true for this pipeline)
@@ -70,9 +79,38 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
         slopes_by_subject[subject] = {ch: r["slope_per_hour"] for ch, r in slopes.items()}
         last_info = raw.info
 
+        step = max(1, int(round(raw.info["sfreq"] / TRACE_DECIMATE_HZ)))
+        if times_sec_ref is None:
+            times_sec_ref = raw.times[::step]
+        for ch in trace_channels:
+            if ch in raw.ch_names:
+                trace_arrays[ch].append(features["inst_freq"][raw.ch_names.index(ch)][::step])
+
     if not slopes_by_subject:
         print(f"[{band_name}] no cleaned subjects found (or none long enough) - nothing to analyze.")
         return
+
+    if times_sec_ref is not None and any(trace_arrays.values()):
+        avg_traces, avg_fits = {}, {}
+        for ch, arrs in trace_arrays.items():
+            if not arrs:
+                continue
+            min_len = min(len(a) for a in arrs)
+            avg_traces[ch] = np.stack([a[:min_len] for a in arrs]).mean(axis=0)
+            avg_fits[ch] = fit_drift_slope(avg_traces[ch], sfreq=TRACE_DECIMATE_HZ, decimate_to_hz=None)
+
+        if avg_traces:
+            common_len = min(len(t) for t in avg_traces.values())
+            fig = plot_inst_freq_traces(
+                times_sec_ref[:common_len],
+                {ch: t[:common_len] for ch, t in avg_traces.items()},
+                avg_fits,
+                band_name,
+                title=f"{band_name}: group-average instantaneous frequency drift (n={len(slopes_by_subject)})",
+            )
+            fig.savefig(out_dir / "avg_inst_freq_trace.png", dpi=150)
+            plt.close(fig)
+            print(f"[{band_name}] saved group-average trace plot to {out_dir}")
 
     channels = sorted({ch for subj in slopes_by_subject.values() for ch in subj})
     _write_csv(
@@ -85,10 +123,24 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
     )
     print(f"[{band_name}] wrote per-subject slopes to {out_dir}")
 
+    # Plain per-channel mean slope topomap - well-defined for any n>=1 (for
+    # n=1 it's just that subject's own values), unlike the statistical group
+    # test below which genuinely needs >=2 subjects to estimate variance.
+    mean_slopes = {
+        ch: float(np.mean([slopes_by_subject[s][ch] for s in slopes_by_subject if ch in slopes_by_subject[s]]))
+        for ch in channels
+    }
+    fig = plot_slope_topomap(
+        mean_slopes, last_info, title=f"{band_name}: mean slope (Hz/hour, n={len(slopes_by_subject)})"
+    )
+    fig.savefig(out_dir / "mean_slope_topomap.png", dpi=150)
+    plt.close(fig)
+    print(f"[{band_name}] saved mean slope topomap to {out_dir}")
+
     if len(slopes_by_subject) < 2:
         print(
             f"[{band_name}] only {len(slopes_by_subject)} subject(s) processed - group_test_slopes "
-            "needs >=2 to fit a t-test per channel, so channel_stats.csv/topomaps are skipped."
+            "needs >=2 to fit a t-test per channel, so channel_stats.csv/the pct-positive topomap are skipped."
         )
         return
 
@@ -102,15 +154,12 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
     )
     print(f"[{band_name}] wrote channel stats to {out_dir}")
 
-    mean_slopes = {ch: row["mean_slope"] for ch, row in channel_stats.items()}
-    fig = plot_slope_topomap(mean_slopes, last_info, title=f"{band_name}: mean slope (Hz/hour)")
-    fig.savefig(out_dir / "mean_slope_topomap.png", dpi=150)
-
     fig = plot_pct_significant_topomap(
         channel_stats, last_info, title=f"{band_name}: % subjects with positive slope"
     )
     fig.savefig(out_dir / "pct_positive_topomap.png", dpi=150)
-    print(f"[{band_name}] saved topomaps to {out_dir}")
+    plt.close(fig)
+    print(f"[{band_name}] saved pct-positive topomap to {out_dir}")
 
 
 def main():

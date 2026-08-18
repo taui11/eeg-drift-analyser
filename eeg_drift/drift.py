@@ -17,6 +17,11 @@ import statsmodels.api as sm
 ANALYSIS_WINDOW_SAMPLES = (20_000, 245_000)
 REFERENCE_FS = 160.0
 
+# Rate traces are decimated to before plotting/fitting (matches
+# fit_drift_slope's own default) - shared so a plotted line and its fitted
+# slope always come from the exact same decimated samples.
+TRACE_DECIMATE_HZ = 1.0
+
 
 def analysis_window_seconds() -> tuple[float, float]:
     return (ANALYSIS_WINDOW_SAMPLES[0] / REFERENCE_FS, ANALYSIS_WINDOW_SAMPLES[1] / REFERENCE_FS)
