@@ -9,6 +9,7 @@ dependencies = [
     "python-picard",
     "edfio",
     "onnxruntime",
+    "scikit-learn",
     "scipy",
     "statsmodels",
     "numpy",
