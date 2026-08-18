@@ -9,6 +9,18 @@ from __future__ import annotations
 import numpy as np
 import statsmodels.api as sm
 
+# Analysis window from the reference MATLAB code: samples 20000-245000 @
+# 160 Hz (~min 2 to min 25, skips the startup transient). Expressed in
+# seconds so it's correct even if a cleaned file ends up at a different
+# sample rate. Shared by run_drift_analysis.py and build_reports.py so the
+# group topomaps and the per-subject trace plots analyze the same window.
+ANALYSIS_WINDOW_SAMPLES = (20_000, 245_000)
+REFERENCE_FS = 160.0
+
+
+def analysis_window_seconds() -> tuple[float, float]:
+    return (ANALYSIS_WINDOW_SAMPLES[0] / REFERENCE_FS, ANALYSIS_WINDOW_SAMPLES[1] / REFERENCE_FS)
+
 
 def fit_drift_slope(
     trace: np.ndarray,

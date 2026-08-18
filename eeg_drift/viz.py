@@ -49,3 +49,45 @@ def plot_pct_significant_topomap(channel_stats: dict[str, dict], info: mne.Info,
     fig.colorbar(im, ax=ax, label="% subjects with positive slope")
     ax.set_title(title)
     return fig
+
+
+def plot_inst_freq_traces(
+    times_sec: np.ndarray,
+    traces: dict[str, np.ndarray],
+    fits: dict[str, dict],
+    band_name: str,
+    title: str = "",
+):
+    """
+    One instantaneous-frequency-over-time line per channel (already
+    decimated/smoothed - this is not meant for raw full-rate data) with its
+    fitted robust-regression drift line overlaid, in the same style as the
+    paper's own per-channel drift figures. Meant for a handful of
+    representative channels (config/bands.yaml's per-band `channels`), not
+    all 64 - that's what the group topomaps are for.
+
+    traces: {ch_name: inst_freq array, aligned with times_sec}
+    fits: {ch_name: fit_drift_slope(...) result} for the same channels
+    """
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    times_min = times_sec / 60.0
+
+    for i, (ch_name, trace) in enumerate(traces.items()):
+        color = colors[i % len(colors)]
+        ax.plot(times_min, trace, linewidth=0.6, alpha=0.5, color=color)
+
+        fit = fits[ch_name]
+        fit_line = fit["intercept"] + fit["slope_per_hour"] * (times_sec / 3600.0)
+        ax.plot(
+            times_min, fit_line, linewidth=2, color=color,
+            label=f"{ch_name}: {fit['slope_per_hour']:+.3f} Hz/hour",
+        )
+
+    ax.set_xlabel("Time (min)")
+    ax.set_ylabel("Inst. frequency (Hz)")
+    ax.set_title(title or f"{band_name}: instantaneous frequency drift")
+    ax.legend(loc="upper right", fontsize=8)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    return fig

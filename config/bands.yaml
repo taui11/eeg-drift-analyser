@@ -1,23 +1,32 @@
-mu:
+# `channels` are the representative channels shown in the per-subject
+# instantaneous-frequency-drift plots (build_reports.py) - group-level
+# topomaps (run_drift_analysis.py) still cover all 64 channels regardless
+# of this list.
+#
+# mu and alpha are the SAME ~8-12 Hz oscillation, not two different
+# bandpass ranges - Kostoglou et al. examine one band across the whole
+# montage and let scalp topography reveal the dissociation: sensorimotor
+# electrodes ("mu", motor-related) accelerate while other electrodes
+# ("alpha", idle/visual-related) slow down. So this is one band
+# definition, with representative channels spanning both regions to show
+# that opposing-forces contrast directly in a single plot.
+mu_alpha:
   fmin: 8
   fmax: 12
   filter_order: 4
   smooth_window_ms: 100
-
-alpha:
-  fmin: 8
-  fmax: 13
-  filter_order: 4
-  smooth_window_ms: 100
+  channels: [C3, Cz, O1]
 
 theta:
   fmin: 4
   fmax: 8
   filter_order: 4
   smooth_window_ms: 100
+  channels: [Fz, Cz]
 
 beta:
   fmin: 13
   fmax: 30
   filter_order: 4
   smooth_window_ms: 100
+  channels: [C3, Cz, C4]
