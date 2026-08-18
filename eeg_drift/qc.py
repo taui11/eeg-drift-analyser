@@ -8,7 +8,13 @@ flag outlier subjects worth a closer look.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import mne
+
+# Columns that are identifiers/counts-of-context rather than "quality"
+# metrics - flagging a subject as an outlier because they have a different
+# subject ID or a different expected_runs count would be meaningless.
+_NON_METRIC_COLUMNS = {"subject", "expected_runs"}
 
 
 def compute_qc_row(
@@ -50,7 +56,32 @@ def compute_qc_row(
     }
 
 
-def flag_outliers(qc_summary, n_std: float = 2.0):
-    """Flag subjects whose automatable QC metrics fall outside n_std of the group mean."""
-    # TODO: operate on a pandas DataFrame of qc rows
-    raise NotImplementedError
+def flag_outliers(qc_summary: pd.DataFrame, n_std: float = 2.0) -> pd.DataFrame:
+    """
+    Flag subjects whose automatable QC metrics fall outside n_std of the
+    group mean. Returns a copy of qc_summary with one added boolean column
+    per numeric metric ("<metric>_outlier") plus "any_outlier" - input is
+    not mutated.
+    """
+    result = qc_summary.copy()
+
+    numeric_cols = [
+        col
+        for col in qc_summary.columns
+        if col not in _NON_METRIC_COLUMNS and pd.api.types.is_numeric_dtype(qc_summary[col])
+    ]
+
+    outlier_cols = []
+    for col in numeric_cols:
+        mean = qc_summary[col].mean()
+        std = qc_summary[col].std()
+        flag_col = f"{col}_outlier"
+
+        if not std or pd.isna(std):
+            result[flag_col] = False
+        else:
+            result[flag_col] = (qc_summary[col] - mean).abs() > n_std * std
+        outlier_cols.append(flag_col)
+
+    result["any_outlier"] = result[outlier_cols].any(axis=1) if outlier_cols else False
+    return result
