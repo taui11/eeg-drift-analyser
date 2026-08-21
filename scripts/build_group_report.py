@@ -80,6 +80,35 @@ def _band_stats_html(band: str, band_dir: Path) -> str:
     return CHANNEL_STATS_EXPLANATION + stats_df.to_html(index=False, float_format=lambda x: f"{x:.3g}")
 
 
+def build_group_report(qc_path: Path, drift_root: Path, config_path: Path, out_path: Path) -> None:
+    if not qc_path.exists():
+        raise FileNotFoundError(f"{qc_path} not found - run scripts/run_preprocess.py first.")
+
+    qc_df = pd.read_csv(qc_path, dtype={"subject": str})
+    if qc_df.empty:
+        print(f"{qc_path} is empty - nothing to build.")
+        return
+    qc_df = flag_outliers(qc_df)
+
+    with open(config_path) as f:
+        band_names = list(yaml.safe_load(f).keys())
+
+    report = mne.Report(title=f"Group QC + drift report ({len(qc_df)} subjects)")
+    report.add_html(_qc_summary_html(qc_df), title="QC summary (all subjects)", tags=("qc",))
+
+    for band in band_names:
+        band_dir = drift_root / band
+
+        for img_path, title_suffix, caption in _band_images(band, band_dir):
+            report.add_image(img_path, title=f"{band}: {title_suffix}", caption=caption, tags=("drift", band))
+
+        report.add_html(_band_stats_html(band, band_dir), title=f"{band}: channel stats", tags=("drift", band))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    report.save(out_path, overwrite=True, open_browser=False, verbose=False)
+    print(f"Saved group report to {out_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build a combined all-subjects group report")
     parser.add_argument("--qc", type=Path, default=Path("results/qc/qc_summary.csv"))
@@ -88,32 +117,7 @@ def main():
     parser.add_argument("--out", type=Path, default=Path("reports/group_report.html"))
     args = parser.parse_args()
 
-    if not args.qc.exists():
-        raise FileNotFoundError(f"{args.qc} not found - run scripts/run_preprocess.py first.")
-
-    qc_df = pd.read_csv(args.qc, dtype={"subject": str})
-    if qc_df.empty:
-        print(f"{args.qc} is empty - nothing to build.")
-        return
-    qc_df = flag_outliers(qc_df)
-
-    with open(args.config) as f:
-        band_names = list(yaml.safe_load(f).keys())
-
-    report = mne.Report(title=f"Group QC + drift report ({len(qc_df)} subjects)")
-    report.add_html(_qc_summary_html(qc_df), title="QC summary (all subjects)", tags=("qc",))
-
-    for band in band_names:
-        band_dir = args.drift_root / band
-
-        for img_path, title_suffix, caption in _band_images(band, band_dir):
-            report.add_image(img_path, title=f"{band}: {title_suffix}", caption=caption, tags=("drift", band))
-
-        report.add_html(_band_stats_html(band, band_dir), title=f"{band}: channel stats", tags=("drift", band))
-
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    report.save(args.out, overwrite=True, open_browser=False, verbose=False)
-    print(f"Saved group report to {args.out}")
+    build_group_report(args.qc, args.drift_root, args.config, args.out)
 
 
 if __name__ == "__main__":

@@ -107,6 +107,28 @@ def build_subject_report(subject: str, qc_row: dict, deriv_root: Path, bands_cfg
     return out_path
 
 
+def build_all_subject_reports(qc_path: Path, deriv_root: Path, config_path: Path, out_dir: Path) -> None:
+    if not qc_path.exists():
+        raise FileNotFoundError(f"{qc_path} not found - run scripts/run_preprocess.py first.")
+
+    qc_df = pd.read_csv(qc_path, dtype={"subject": str})
+    if qc_df.empty:
+        print(f"{qc_path} is empty - nothing to build.")
+        return
+
+    qc_df = flag_outliers(qc_df)
+
+    with open(config_path) as f:
+        bands_cfg = yaml.safe_load(f)
+
+    for _, row in qc_df.iterrows():
+        qc_row = row.to_dict()
+        subject = qc_row["subject"]
+        print(f"[{subject}] building QC report...")
+        out_path = build_subject_report(subject, qc_row, deriv_root, bands_cfg, out_dir)
+        print(f"[{subject}] saved {out_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build per-subject QC reports")
     parser.add_argument("--qc", type=Path, default=Path("results/qc/qc_summary.csv"))
@@ -115,25 +137,7 @@ def main():
     parser.add_argument("--out", type=Path, default=Path("reports"))
     args = parser.parse_args()
 
-    if not args.qc.exists():
-        raise FileNotFoundError(f"{args.qc} not found - run scripts/run_preprocess.py first.")
-
-    qc_df = pd.read_csv(args.qc, dtype={"subject": str})
-    if qc_df.empty:
-        print(f"{args.qc} is empty - nothing to build.")
-        return
-
-    qc_df = flag_outliers(qc_df)
-
-    with open(args.config) as f:
-        bands_cfg = yaml.safe_load(f)
-
-    for _, row in qc_df.iterrows():
-        qc_row = row.to_dict()
-        subject = qc_row["subject"]
-        print(f"[{subject}] building QC report...")
-        out_path = build_subject_report(subject, qc_row, args.deriv_root, bands_cfg, args.out)
-        print(f"[{subject}] saved {out_path}")
+    build_all_subject_reports(args.qc, args.deriv_root, args.config, args.out)
 
 
 if __name__ == "__main__":

@@ -162,6 +162,17 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
     print(f"[{band_name}] saved pct-positive topomap to {out_dir}")
 
 
+def run_drift_analysis_all(deriv_root: Path, out_root: Path, config_path: Path, band: str | None = None) -> None:
+    """Run run_for_band() for `band`, or every band in config_path if band is None."""
+    with open(config_path) as f:
+        all_bands_cfg = yaml.safe_load(f)
+
+    bands_to_run = [band] if band else list(all_bands_cfg.keys())
+
+    for band_name in bands_to_run:
+        run_for_band(band_name, all_bands_cfg[band_name], deriv_root, out_root / band_name)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run drift analysis for one band, or all configured bands")
     parser.add_argument("--band", default=None, help="key in config/bands.yaml; omit to run every band")
@@ -173,13 +184,7 @@ def main():
     )
     args = parser.parse_args()
 
-    with open(args.config) as f:
-        all_bands_cfg = yaml.safe_load(f)
-
-    bands_to_run = [args.band] if args.band else list(all_bands_cfg.keys())
-
-    for band_name in bands_to_run:
-        run_for_band(band_name, all_bands_cfg[band_name], args.deriv_root, args.out / band_name)
+    run_drift_analysis_all(args.deriv_root, args.out, args.config, band=args.band)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,27 @@
+# Single source of truth for `python scripts/run_pipeline.py` - one
+# command, start to finish: raw EDFs -> BIDS -> preprocessing -> drift
+# analysis -> per-subject + group reports.
+#
+# Every individual scripts/run_*.py / build_*.py still works standalone
+# with its own CLI flags (e.g. to rerun just one stage) - this file only
+# feeds scripts/run_pipeline.py.
+
+raw_dir: data/raw
+bids_root: data/bids
+deriv_root: data/derivatives
+qc_out: results/qc/qc_summary.csv
+drift_root: results/drift
+reports_dir: reports
+group_report_out: reports/group_report.html
+bands_config: config/bands.yaml
+
+task: motorimagery
+runs: ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14"]
+
+# Which subjects to process, as PhysioNet subject numbers (ints), e.g.
+# [1, 2, 3]. null = every usable subject
+# (eeg_drift.bids_convert.USABLE_SUBJECTS, ~100 subjects) - that's a
+# multi-hour run (ICA alone is a few minutes per subject), so for a first
+# test uncomment the line below instead.
+subjects: null
+# subjects: [1]
