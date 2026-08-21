@@ -1,3 +1,40 @@
+> ## 💡 Future improvements (not yet implemented)
+>
+> - **Correlation analysis** — already listed under Assignments below
+>   ("correlate bands to each other", "correlation of magnitude and
+>   frequency w.r.t. time") but not built yet.
+>   `eeg_drift.features.extract_band_features` already computes
+>   `inst_power` alongside `inst_freq`, so the data's there - just needs a
+>   correlation/plotting module to actually compare them.
+> - **Parallelization** — a real 5-subject run took ~21 min wall-clock
+>   (avg ~4 min/subject, ICA-dominated), so all ~100 usable subjects would
+>   be several hours sequential. Subjects are fully independent through
+>   preprocessing, so multiprocessing across subjects would help - but
+>   picard/numpy already used ~400% CPU for a single subject in that run,
+>   so worker count needs to account for that (or cap threads per worker
+>   via `OMP_NUM_THREADS` etc.) rather than just spawning
+>   `min(n_subjects, n_cpus)` workers and hoping for a clean multiplier.
+>
+> A few other gaps noticed while building this, not tracked anywhere else:
+> - **Resumable preprocessing** — `run_preprocess()` always refits ICA for
+>   every requested subject, even if
+>   `data/derivatives/sub-XXX_clean_raw.fif` already exists.
+>   `bids_convert.convert_file_to_bids` already skips already-converted
+>   files - `run_preprocess` should do the same, so reruns of
+>   `run_pipeline.py` don't redo the most expensive step every time.
+> - **`n_runs_loaded`/`n_runs_missing`** — always blank in
+>   `qc_summary.csv`; `concatenate_subject_runs` would need to report how
+>   many runs it actually found for these to mean anything.
+> - **Validate the ICLabel thresholds for real** — `run_ica_review.py` +
+>   `derive_thresholds.py` exist and were smoke-tested, but never run on
+>   an actual manually-labeled set to check/refine `ICLABEL_THRESHOLDS`.
+> - **The line-noise ICLabel class** — flagged as an open question in
+>   `preprocess.py` (warns at runtime if seen, never actually handled).
+> - **Correlate against Kostoglou's published slope values** — deferred
+>   earlier for lack of her actual per-channel/per-band numbers; ask her
+>   for those and wire up the comparison plot.
+
+
 # eeg-drift-analyser
 
 Seminar project — detecting within-session frequency drift in EEG bands.  
