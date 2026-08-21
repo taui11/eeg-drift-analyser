@@ -17,6 +17,8 @@ Example:
 """
 
 import argparse
+import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -27,6 +29,36 @@ from build_group_report import build_group_report
 from build_reports import build_all_subject_reports
 from run_drift_analysis import run_drift_analysis_all
 from run_preprocess import run_preprocess
+
+
+class _Tee:
+    """Writes to multiple streams at once - lets stdout/stderr keep going to the console while also persisting to a file."""
+
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data):
+        for s in self._streams:
+            s.write(data)
+
+    def flush(self):
+        for s in self._streams:
+            s.flush()
+
+
+def setup_logging(log_dir: Path) -> Path:
+    """
+    Mirrors everything printed (by this script and everything it calls) to
+    a timestamped file under log_dir, in addition to the console - so a
+    server run (nohup/systemd/cron, no attached terminal) still leaves a
+    permanent, self-contained record inside the repo.
+    """
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"pipeline_{time.strftime('%Y%m%d_%H%M%S')}.log"
+    log_file = open(log_path, "w")
+    sys.stdout = _Tee(sys.__stdout__, log_file)
+    sys.stderr = _Tee(sys.__stderr__, log_file)
+    return log_path
 
 
 def run_pipeline(cfg: dict) -> None:
@@ -74,7 +106,14 @@ def main():
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    run_pipeline(cfg)
+    log_path = setup_logging(Path(cfg.get("log_dir", "logs")))
+    print(f"Logging to {log_path}")
+
+    try:
+        run_pipeline(cfg)
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
 
 
 if __name__ == "__main__":
