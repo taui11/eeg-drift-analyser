@@ -1,3 +1,31 @@
+> ## ✅ First full run (2026-08-22)
+>
+> **What we did:** built a one-command, config-driven pipeline
+> (`scripts/run_pipeline.py` + `config/pipeline.yaml`) covering raw EDF →
+> BIDS → preprocessing/ICA → drift analysis → per-subject + group HTML
+> reports, and ran it on all 100 usable subjects. 97 succeeded; 3
+> (S088/S092/S100) hit a known issue in this dataset (task runs recorded
+> at 128 Hz instead of 160 Hz) and are now skipped gracefully instead of
+> crashing the whole run.
+>
+> **What we found:** the mu_alpha group topomap (`reports/group_report.html`)
+> shows a pattern that qualitatively resembles Kostoglou et al.'s
+> "sensorimotor mu speeds up, elsewhere slows down," but it is **not
+> statistically significant** after FDR correction (best `p_value_fdr` ≈
+> 0.98 across all 64 channels) - inconclusive, not confirmatory, as
+> currently configured. Likely candidates for the gap: no common-average
+> reference (per the supervisor's instruction, but ICLabel/likely the
+> paper's own pipeline expects one), a fixed 8-12 Hz band instead of each
+> subject's own mu/alpha peak frequency, and ICA rejection thresholds
+> generalized from reviewing a single subject (S001).
+>
+> **Known gap:** a crash mid-run (root-caused and fixed, see below) means
+> `results/qc/qc_summary.csv` and the per-subject reports only cover 17 of
+> the 97 successfully-preprocessed subjects - the group-level drift stats
+> and topomaps use all 97 regardless, since they read cleaned `.fif` files
+> directly rather than the QC table.
+>
+>
 > ## 💡 Future improvements (not yet implemented)
 >
 > - **Correlation analysis** — already listed under Assignments below
@@ -16,12 +44,6 @@
 >   `min(n_subjects, n_cpus)` workers and hoping for a clean multiplier.
 >
 > A few other gaps noticed while building this, not tracked anywhere else:
-> - **Resumable preprocessing** — `run_preprocess()` always refits ICA for
->   every requested subject, even if
->   `data/derivatives/sub-XXX_clean_raw.fif` already exists.
->   `bids_convert.convert_file_to_bids` already skips already-converted
->   files - `run_preprocess` should do the same, so reruns of
->   `run_pipeline.py` don't redo the most expensive step every time.
 > - **`n_runs_loaded`/`n_runs_missing`** — always blank in
 >   `qc_summary.csv`; `concatenate_subject_runs` would need to report how
 >   many runs it actually found for these to mean anything.

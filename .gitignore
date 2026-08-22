@@ -1,0 +1,16 @@
+# Raw/intermediate EEG data - large (GBs), publicly re-derivable from
+# PhysioNet + this repo's pipeline. Never commit these; keep them local
+# (or wherever you keep the raw dataset - external drive, server disk).
+data/raw/*
+data/bids/*
+data/derivatives/*
+!data/raw/.gitkeep
+!data/bids/.gitkeep
+!data/derivatives/.gitkeep
+
+# Per-run pipeline logs - timestamped, regenerated every run.
+logs/*.log
+
+__pycache__/
+*.pyc
+*.egg-info/
