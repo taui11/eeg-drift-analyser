@@ -44,6 +44,14 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
+def _subjectwise_car_demean(slopes: dict[str, float]) -> dict[str, float]:
+    """Remove the across-channel mean slope from each channel within one subject."""
+    if not slopes:
+        return {}
+    mean_slope = float(np.mean(list(slopes.values())))
+    return {ch: float(slope - mean_slope) for ch, slope in slopes.items()}
+
+
 def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     tmin, tmax = analysis_window_seconds()
@@ -123,6 +131,20 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
     )
     print(f"[{band_name}] wrote per-subject slopes to {out_dir}")
 
+    demeaned_slopes_by_subject = {
+        subject: _subjectwise_car_demean(slopes) for subject, slopes in slopes_by_subject.items()
+    }
+    demeaned_channels = sorted({ch for subj in demeaned_slopes_by_subject.values() for ch in subj})
+    _write_csv(
+        out_dir / "demeaned_slopes_by_subject.csv",
+        fieldnames=["subject", *demeaned_channels],
+        rows=[
+            {"subject": subject, **{ch: slopes.get(ch, "") for ch in demeaned_channels}}
+            for subject, slopes in demeaned_slopes_by_subject.items()
+        ],
+    )
+    print(f"[{band_name}] wrote subject-wise CAR-demeaned slopes to {out_dir}")
+
     # Plain per-channel mean slope topomap - well-defined for any n>=1 (for
     # n=1 it's just that subject's own values), unlike the statistical group
     # test below which genuinely needs >=2 subjects to estimate variance.
@@ -136,6 +158,25 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
     fig.savefig(out_dir / "mean_slope_topomap.png", dpi=150)
     plt.close(fig)
     print(f"[{band_name}] saved mean slope topomap to {out_dir}")
+
+    # CAR-style subject-wise demeaning: remove the mean across channels for each
+    # subject, then average the demeaned values across subjects.
+    demeaned_mean_slopes = {
+        ch: float(
+            np.mean(
+                [demeaned_slopes_by_subject[s][ch] for s in demeaned_slopes_by_subject if ch in demeaned_slopes_by_subject[s]]
+            )
+        )
+        for ch in demeaned_channels
+    }
+    fig = plot_slope_topomap(
+        demeaned_mean_slopes,
+        last_info,
+        title=f"{band_name}: mean slope after subject-wise CAR demeaning (Hz/hour, n={len(demeaned_slopes_by_subject)})",
+    )
+    fig.savefig(out_dir / "mean_slope_car_topomap.png", dpi=150)
+    plt.close(fig)
+    print(f"[{band_name}] saved subject-wise CAR-demeaned mean slope topomap to {out_dir}")
 
     if len(slopes_by_subject) < 2:
         print(
