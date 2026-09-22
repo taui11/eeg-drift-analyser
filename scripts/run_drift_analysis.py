@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import yaml
+from scipy.stats import trim_mean
 
 from eeg_drift.drift import TRACE_DECIMATE_HZ, analysis_window_seconds, fit_drift_slope, fit_drift_slopes_all_channels
 from eeg_drift.features import extract_band_features
@@ -109,7 +110,11 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
             if not arrs:
                 continue
             min_len = min(len(a) for a in arrs)
-            avg_traces[ch] = np.stack([a[:min_len] for a in arrs]).mean(axis=0)
+            stacked = np.stack([a[:min_len] for a in arrs])
+            # Trimmed mean (20% from each tail per time point) so a spike in one
+            # subject doesn't pull the group average - plain mean is dominated by
+            # the start-of-recording transient even after the edge fix.
+            avg_traces[ch] = trim_mean(stacked, proportiontocut=0.2, axis=0) if len(arrs) >= 5 else stacked.mean(axis=0)
             avg_fits[ch] = fit_drift_slope(avg_traces[ch], sfreq=TRACE_DECIMATE_HZ, decimate_to_hz=None)
 
         if avg_traces:
@@ -119,7 +124,7 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
                 {ch: t[:common_len] for ch, t in avg_traces.items()},
                 avg_fits,
                 band_name,
-                title=f"{band_name}: group-average instantaneous frequency drift (n={len(slopes_by_subject)})",
+                title=f"{band_name}: group-average inst. freq. drift (n={len(slopes_by_subject)}, {'trimmed mean ±20%' if len(slopes_by_subject) >= 5 else 'mean'})",
             )
             fig.savefig(out_dir / "avg_inst_freq_trace.png", dpi=150)
             plt.close(fig)
