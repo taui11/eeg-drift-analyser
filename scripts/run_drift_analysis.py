@@ -87,9 +87,14 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
         slopes_by_subject[subject] = {ch: r["slope_per_hour"] for ch, r in slopes.items()}
         last_info = raw.info
 
+        # inst_freq is shorter than raw.times (edge-trimmed in
+        # extract_band_features) - keep the time axis aligned with it.
+        n_trim = features["n_trimmed_start"]
+        times_trimmed = raw.times[n_trim : len(raw.times) - n_trim] if n_trim else raw.times
+
         step = max(1, int(round(raw.info["sfreq"] / TRACE_DECIMATE_HZ)))
         if times_sec_ref is None:
-            times_sec_ref = raw.times[::step]
+            times_sec_ref = times_trimmed[::step]
         for ch in trace_channels:
             if ch in raw.ch_names:
                 trace_arrays[ch].append(features["inst_freq"][raw.ch_names.index(ch)][::step])

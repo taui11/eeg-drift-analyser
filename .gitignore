@@ -11,6 +11,9 @@ data/derivatives/*
 # Per-run pipeline logs - timestamped, regenerated every run.
 logs/*.log
 
+# Large local data archives - never commit these (see data/raw etc. above).
+*.zip
+
 __pycache__/
 *.pyc
 *.egg-info/
