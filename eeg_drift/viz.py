@@ -112,9 +112,12 @@ def plot_inst_amp_traces(
 
         fit = fits[ch_name]
         fit_line = fit["intercept"] + fit["slope_per_hour"] * (times_sec / 3600.0)
+        # Amplitude slopes are ~1e-6/1e-7 (unlike frequency's ~0.01-0.1) -
+        # .3f would round every single one down to "0.000", so this needs
+        # scientific notation to actually show a value.
         ax.plot(
             times_min, fit_line, linewidth=2, color=color,
-            label=f"{ch_name}: {fit['slope_per_hour']:+.3f} a.u./hour",
+            label=f"{ch_name}: {fit['slope_per_hour']:+.2e} a.u./hour",
         )
 
     ax.set_xlabel("Time (min)")
