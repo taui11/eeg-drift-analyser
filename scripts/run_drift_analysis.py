@@ -11,6 +11,7 @@ Example:
 
 import argparse
 import csv
+import gc
 import re
 from pathlib import Path
 
@@ -102,8 +103,16 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
             times_sec_ref = times_trimmed[::step]
         for ch in trace_channels:
             if ch in raw.ch_names:
-                trace_arrays[ch].append(features["inst_freq"][raw.ch_names.index(ch)][::step])
-                amp_trace_arrays[ch].append(features["inst_amp"][raw.ch_names.index(ch)][::step])
+                # .copy() is essential here: step-slicing a numpy array returns a
+                # VIEW, not a copy, so without it this decimated ~11KB array would
+                # keep the entire underlying (64, n_samples) inst_freq/inst_amp
+                # buffer (~230MB combined) alive for the rest of the band's loop,
+                # once per subject - OOM-killed a 97-subject run on this machine.
+                trace_arrays[ch].append(features["inst_freq"][raw.ch_names.index(ch)][::step].copy())
+                amp_trace_arrays[ch].append(features["inst_amp"][raw.ch_names.index(ch)][::step].copy())
+
+        del raw, features, freq_slopes, amp_slopes
+        gc.collect()
 
     if not slopes_by_subject:
         print(f"[{band_name}] no cleaned subjects found (or none long enough) - nothing to analyze.")
@@ -224,6 +233,7 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
         mean_amp_slopes,
         last_info,
         title=f"{band_name}: mean amplitude slope (a.u./hour, n={len(amp_slopes_by_subject)})",
+        unit="a.u./hour",
     )
     fig.savefig(out_dir / "mean_amplitude_slope_topomap.png", dpi=150)
     plt.close(fig)
@@ -258,6 +268,7 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
         demeaned_mean_amp_slopes,
         last_info,
         title=f"{band_name}: mean amplitude slope after subject-wise CAR demeaning (a.u./hour, n={len(demeaned_amp_slopes_by_subject)})",
+        unit="a.u./hour",
     )
     fig.savefig(out_dir / "mean_amplitude_slope_car_topomap.png", dpi=150)
     plt.close(fig)

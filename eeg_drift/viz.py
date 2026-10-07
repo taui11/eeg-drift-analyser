@@ -15,20 +15,21 @@ def _pick_info_subset(info: mne.Info, ch_names: list[str]) -> mne.Info:
     return mne.pick_info(info, sel)
 
 
-def plot_slope_topomap(channel_slopes: dict[str, float], info: mne.Info, title: str = ""):
-    """Scalp topomap of per-channel slope values (Hz/hour), diverging colormap centered at 0."""
+def plot_slope_topomap(channel_slopes: dict[str, float], info: mne.Info, title: str = "", unit: str = "Hz/hour"):
+    """Scalp topomap of per-channel slope values, diverging colormap centered at 0."""
     ch_names = [ch for ch in info["ch_names"] if ch in channel_slopes]
     values = np.array([channel_slopes[ch] for ch in ch_names])
     info_subset = _pick_info_subset(info, ch_names)
 
     vlim = float(np.abs(values).max()) if len(values) else 1.0
 
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
     im, _ = mne.viz.plot_topomap(
         values, info_subset, axes=ax, show=False, cmap="RdBu_r", vlim=(-vlim, vlim)
     )
-    fig.colorbar(im, ax=ax, label="Slope (Hz/hour)")
-    ax.set_title(title)
+    fig.colorbar(im, ax=ax, label=f"Slope ({unit})")
+    fig.suptitle(title, fontsize=9)
+    fig.tight_layout()
     return fig
 
 
