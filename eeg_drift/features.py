@@ -40,10 +40,15 @@ def instantaneous_frequency(data: np.ndarray, sfreq: float) -> np.ndarray:
     return inst_freq
 
 
+def instantaneous_amplitude(data: np.ndarray) -> np.ndarray:
+    """Instantaneous amplitude via Hilbert transform: |hilbert(x)|."""
+    analytic = hilbert(data, axis=-1)
+    return np.abs(analytic)
+
+
 def instantaneous_power(data: np.ndarray) -> np.ndarray:
     """Instantaneous power via Hilbert transform: |hilbert(x)|^2."""
-    analytic = hilbert(data, axis=-1)
-    return np.abs(analytic) ** 2
+    return instantaneous_amplitude(data) ** 2
 
 
 def smooth_moving_average(data: np.ndarray, window_samples: int) -> np.ndarray:
@@ -101,8 +106,8 @@ def extract_band_features(
     Full feature-extraction chain for one band, one array of shape
     (n_channels, n_samples) or (n_samples,).
 
-    Returns dict with 'inst_freq' and 'inst_power' (smoothed, and trimmed
-    by edge_trim_sec at each end - see EDGE_TRIM_SEC), plus
+    Returns dict with 'inst_freq', 'inst_amp', and 'inst_power' (smoothed,
+    and trimmed by edge_trim_sec at each end - see EDGE_TRIM_SEC), plus
     'n_trimmed_start' (samples dropped from the start) so callers that
     build their own time axis from the original data can stay aligned,
     e.g. `times[n_trimmed_start : len(times) - n_trimmed_start]`.
@@ -110,15 +115,23 @@ def extract_band_features(
     filtered = bandpass_filter(data, sfreq, fmin, fmax, order=filter_order)
 
     inst_freq = instantaneous_frequency(filtered, sfreq)
+    inst_amp = instantaneous_amplitude(filtered)
     inst_power = instantaneous_power(filtered)
 
     window_samples = int(sfreq * smooth_window_ms / 1000.0)
     inst_freq = smooth_moving_average(inst_freq, window_samples)
+    inst_amp = smooth_moving_average(inst_amp, window_samples)
     inst_power = smooth_moving_average(inst_power, window_samples)
 
     n_trim = int(round(sfreq * edge_trim_sec))
     if n_trim > 0:
         inst_freq = inst_freq[..., n_trim:-n_trim]
+        inst_amp = inst_amp[..., n_trim:-n_trim]
         inst_power = inst_power[..., n_trim:-n_trim]
 
-    return {"inst_freq": inst_freq, "inst_power": inst_power, "n_trimmed_start": n_trim}
+    return {
+        "inst_freq": inst_freq,
+        "inst_amp": inst_amp,
+        "inst_power": inst_power,
+        "n_trimmed_start": n_trim,
+    }

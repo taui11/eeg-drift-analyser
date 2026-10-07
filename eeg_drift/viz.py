@@ -91,3 +91,35 @@ def plot_inst_freq_traces(
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     return fig
+
+
+def plot_inst_amp_traces(
+    times_sec: np.ndarray,
+    traces: dict[str, np.ndarray],
+    fits: dict[str, dict],
+    band_name: str,
+    title: str = "",
+):
+    """Like plot_inst_freq_traces but for the Hilbert envelope amplitude."""
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    times_min = times_sec / 60.0
+
+    for i, (ch_name, trace) in enumerate(traces.items()):
+        color = colors[i % len(colors)]
+        ax.plot(times_min, trace, linewidth=0.6, alpha=0.5, color=color)
+
+        fit = fits[ch_name]
+        fit_line = fit["intercept"] + fit["slope_per_hour"] * (times_sec / 3600.0)
+        ax.plot(
+            times_min, fit_line, linewidth=2, color=color,
+            label=f"{ch_name}: {fit['slope_per_hour']:+.3f} a.u./hour",
+        )
+
+    ax.set_xlabel("Time (min)")
+    ax.set_ylabel("Inst. amplitude (a.u.)")
+    ax.set_title(title or f"{band_name}: instantaneous amplitude drift")
+    ax.legend(loc="upper right", fontsize=8)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    return fig

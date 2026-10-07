@@ -23,7 +23,7 @@ import yaml
 from eeg_drift.qc import flag_outliers
 
 CHANNEL_STATS_EXPLANATION = (
-    "<p>One-sample t-test of each channel's slope (Hz/hour) against 0 across subjects, "
+    "<p>One-sample t-test of each channel's slope against 0 across subjects, "
     "Benjamini-Hochberg FDR-corrected across channels (p_value_fdr). pct_positive is the "
     "share of subjects with slope &gt; 0 (point estimate only, not a per-subject significance test).</p>"
 )
@@ -51,50 +51,83 @@ def _band_images(band: str, band_dir: Path) -> list[tuple[Path, str, str]]:
     """Returns (path, title_suffix, caption) for whichever of this band's plots exist."""
     candidates = [
         (
-            "avg_inst_freq_trace.png", "group-average drift",
+            "avg_inst_freq_trace.png", "group-average frequency drift",
             "Group-average instantaneous frequency per representative channel (mean trace across "
             "all processed subjects), with a drift line fit directly to that averaged trace.",
         ),
         (
-            "mean_slope_topomap.png", "mean slope topomap",
-            "Average per-channel drift slope (Hz/hour) across subjects, all 64 channels. "
+            "avg_inst_amp_trace.png", "group-average amplitude drift",
+            "Group-average instantaneous amplitude (Hilbert envelope) per representative channel "
+            "(mean trace across all processed subjects), with a drift line fit directly to that averaged trace.",
+        ),
+        (
+            "mean_slope_topomap.png", "mean frequency slope topomap",
+            "Average per-channel frequency drift slope (Hz/hour) across subjects, all 64 channels. "
             "Red = accelerating, blue = slowing.",
         ),
         (
-            "pct_positive_topomap.png", "% positive topomap",
-            "Percentage of subjects with a positive (accelerating) slope per channel "
+            "mean_amplitude_slope_topomap.png", "mean amplitude slope topomap",
+            "Average per-channel amplitude drift slope (a.u./hour) across subjects, all 64 channels. "
+            "Red = accelerating, blue = slowing.",
+        ),
+        (
+            "pct_positive_topomap.png", "% positive frequency topomap",
+            "Percentage of subjects with a positive (accelerating) frequency slope per channel "
             "(point estimate only, see channel_stats table for the FDR-corrected group test).",
+        ),
+        (
+            "pct_positive_amplitude_topomap.png", "% positive amplitude topomap",
+            "Percentage of subjects with a positive (accelerating) amplitude slope per channel "
+            "(point estimate only, see amplitude_channel_stats table for the FDR-corrected group test).",
         ),
     ]
     return [(band_dir / fname, title, caption) for fname, title, caption in candidates if (band_dir / fname).exists()]
 
 
 def _band_stats_html(band: str, band_dir: Path) -> str:
-    stats_csv = band_dir / "channel_stats.csv"
-    if not stats_csv.exists():
+    sections = []
+    for stats_name, label, file_name in [
+        ("frequency", "Frequency drift", "channel_stats.csv"),
+        ("amplitude", "Amplitude drift", "amplitude_channel_stats.csv"),
+    ]:
+        stats_csv = band_dir / file_name
+        if not stats_csv.exists():
+            continue
+        stats_df = pd.read_csv(stats_csv)
+        sections.append(f"<h4>{label}</h4>")
+        sections.append(CHANNEL_STATS_EXPLANATION)
+        sections.append(stats_df.to_html(index=False, float_format=lambda x: f"{x:.3g}"))
+
+    if not sections:
         return (
             "<p>No group channel_stats.csv for this band - run scripts/run_drift_analysis.py "
             "with &gt;=2 subjects first (a single subject can't fit a t-test).</p>"
         )
-    stats_df = pd.read_csv(stats_csv)
-    return CHANNEL_STATS_EXPLANATION + stats_df.to_html(index=False, float_format=lambda x: f"{x:.3g}")
+    return "".join(sections)
 
 
 def build_group_report(qc_path: Path, drift_root: Path, config_path: Path, out_path: Path) -> None:
-    if not qc_path.exists():
-        raise FileNotFoundError(f"{qc_path} not found - run scripts/run_preprocess.py first.")
-
-    qc_df = pd.read_csv(qc_path, dtype={"subject": str})
-    if qc_df.empty:
-        print(f"{qc_path} is empty - nothing to build.")
-        return
-    qc_df = flag_outliers(qc_df)
+    qc_df = None
+    if qc_path.exists():
+        qc_df = pd.read_csv(qc_path, dtype={"subject": str})
+        if qc_df.empty:
+            print(f"{qc_path} is empty - omitting QC section.")
+            qc_df = None
 
     with open(config_path) as f:
         band_names = list(yaml.safe_load(f).keys())
 
-    report = mne.Report(title=f"Group QC + drift report ({len(qc_df)} subjects)")
-    report.add_html(_qc_summary_html(qc_df), title="QC summary (all subjects)", tags=("qc",))
+    if qc_df is not None:
+        qc_df = flag_outliers(qc_df)
+        report = mne.Report(title=f"Group QC + drift report ({len(qc_df)} subjects)")
+        report.add_html(_qc_summary_html(qc_df), title="QC summary (all subjects)", tags=("qc",))
+    else:
+        report = mne.Report(title="Group drift report")
+        report.add_html(
+            f"<p>No QC summary available at {qc_path}. Drift outputs are included, "
+            "but automated QC metrics and outlier flags are unavailable.</p>",
+            title="QC summary unavailable", tags=("qc",),
+        )
 
     for band in band_names:
         band_dir = drift_root / band

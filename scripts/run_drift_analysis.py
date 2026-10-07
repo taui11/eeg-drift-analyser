@@ -26,7 +26,7 @@ from scipy.stats import trim_mean
 from eeg_drift.drift import TRACE_DECIMATE_HZ, analysis_window_seconds, fit_drift_slope, fit_drift_slopes_all_channels
 from eeg_drift.features import extract_band_features
 from eeg_drift.stats import group_test_slopes
-from eeg_drift.viz import plot_inst_freq_traces, plot_pct_significant_topomap, plot_slope_topomap
+from eeg_drift.viz import plot_inst_amp_traces, plot_inst_freq_traces, plot_pct_significant_topomap, plot_slope_topomap
 
 SUBJECT_FILE_RE = re.compile(r"^sub-(?P<subject>.+)_clean_raw\.fif$")
 
@@ -59,9 +59,11 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
 
     trace_channels = [ch for ch in band_cfg.get("channels", [])]
     trace_arrays: dict[str, list[np.ndarray]] = {ch: [] for ch in trace_channels}
+    amp_trace_arrays: dict[str, list[np.ndarray]] = {ch: [] for ch in trace_channels}
     times_sec_ref = None
 
     slopes_by_subject: dict[str, dict[str, float]] = {}
+    amp_slopes_by_subject: dict[str, dict[str, float]] = {}
     last_info = None  # assumes a consistent 64-ch montage across subjects (true for this pipeline)
 
     for subject, fif_path in _iter_cleaned_subjects(deriv_root):
@@ -82,14 +84,16 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
             smooth_window_ms=band_cfg.get("smooth_window_ms", 100.0),
         )
 
-        slopes = fit_drift_slopes_all_channels(
+        freq_slopes = fit_drift_slopes_all_channels(
             features["inst_freq"], sfreq=raw.info["sfreq"], ch_names=raw.ch_names
         )
-        slopes_by_subject[subject] = {ch: r["slope_per_hour"] for ch, r in slopes.items()}
+        amp_slopes = fit_drift_slopes_all_channels(
+            features["inst_amp"], sfreq=raw.info["sfreq"], ch_names=raw.ch_names
+        )
+        slopes_by_subject[subject] = {ch: r["slope_per_hour"] for ch, r in freq_slopes.items()}
+        amp_slopes_by_subject[subject] = {ch: r["slope_per_hour"] for ch, r in amp_slopes.items()}
         last_info = raw.info
 
-        # inst_freq is shorter than raw.times (edge-trimmed in
-        # extract_band_features) - keep the time axis aligned with it.
         n_trim = features["n_trimmed_start"]
         times_trimmed = raw.times[n_trim : len(raw.times) - n_trim] if n_trim else raw.times
 
@@ -99,6 +103,7 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
         for ch in trace_channels:
             if ch in raw.ch_names:
                 trace_arrays[ch].append(features["inst_freq"][raw.ch_names.index(ch)][::step])
+                amp_trace_arrays[ch].append(features["inst_amp"][raw.ch_names.index(ch)][::step])
 
     if not slopes_by_subject:
         print(f"[{band_name}] no cleaned subjects found (or none long enough) - nothing to analyze.")
@@ -111,9 +116,6 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
                 continue
             min_len = min(len(a) for a in arrs)
             stacked = np.stack([a[:min_len] for a in arrs])
-            # Trimmed mean (20% from each tail per time point) so a spike in one
-            # subject doesn't pull the group average - plain mean is dominated by
-            # the start-of-recording transient even after the edge fix.
             avg_traces[ch] = trim_mean(stacked, proportiontocut=0.2, axis=0) if len(arrs) >= 5 else stacked.mean(axis=0)
             avg_fits[ch] = fit_drift_slope(avg_traces[ch], sfreq=TRACE_DECIMATE_HZ, decimate_to_hz=None)
 
@@ -128,9 +130,33 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
             )
             fig.savefig(out_dir / "avg_inst_freq_trace.png", dpi=150)
             plt.close(fig)
-            print(f"[{band_name}] saved group-average trace plot to {out_dir}")
+            print(f"[{band_name}] saved group-average frequency trace plot to {out_dir}")
+
+    if times_sec_ref is not None and any(amp_trace_arrays.values()):
+        avg_amp_traces, avg_amp_fits = {}, {}
+        for ch, arrs in amp_trace_arrays.items():
+            if not arrs:
+                continue
+            min_len = min(len(a) for a in arrs)
+            stacked = np.stack([a[:min_len] for a in arrs])
+            avg_amp_traces[ch] = trim_mean(stacked, proportiontocut=0.2, axis=0) if len(arrs) >= 5 else stacked.mean(axis=0)
+            avg_amp_fits[ch] = fit_drift_slope(avg_amp_traces[ch], sfreq=TRACE_DECIMATE_HZ, decimate_to_hz=None)
+
+        if avg_amp_traces:
+            common_len = min(len(t) for t in avg_amp_traces.values())
+            fig = plot_inst_amp_traces(
+                times_sec_ref[:common_len],
+                {ch: t[:common_len] for ch, t in avg_amp_traces.items()},
+                avg_amp_fits,
+                band_name,
+                title=f"{band_name}: group-average inst. amplitude drift (n={len(amp_slopes_by_subject)}, {'trimmed mean ±20%' if len(amp_slopes_by_subject) >= 5 else 'mean'})",
+            )
+            fig.savefig(out_dir / "avg_inst_amp_trace.png", dpi=150)
+            plt.close(fig)
+            print(f"[{band_name}] saved group-average amplitude trace plot to {out_dir}")
 
     channels = sorted({ch for subj in slopes_by_subject.values() for ch in subj})
+    amp_channels = sorted({ch for subj in amp_slopes_by_subject.values() for ch in subj})
     _write_csv(
         out_dir / "slopes_by_subject.csv",
         fieldnames=["subject", *channels],
@@ -139,7 +165,17 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
             for subject, slopes in slopes_by_subject.items()
         ],
     )
-    print(f"[{band_name}] wrote per-subject slopes to {out_dir}")
+    print(f"[{band_name}] wrote frequency slopes to {out_dir}")
+
+    _write_csv(
+        out_dir / "amplitude_slopes_by_subject.csv",
+        fieldnames=["subject", *amp_channels],
+        rows=[
+            {"subject": subject, **{ch: slopes.get(ch, "") for ch in amp_channels}}
+            for subject, slopes in amp_slopes_by_subject.items()
+        ],
+    )
+    print(f"[{band_name}] wrote amplitude slopes to {out_dir}")
 
     demeaned_slopes_by_subject = {
         subject: _subjectwise_car_demean(slopes) for subject, slopes in slopes_by_subject.items()
@@ -153,11 +189,22 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
             for subject, slopes in demeaned_slopes_by_subject.items()
         ],
     )
-    print(f"[{band_name}] wrote subject-wise CAR-demeaned slopes to {out_dir}")
+    print(f"[{band_name}] wrote subject-wise CAR-demeaned frequency slopes to {out_dir}")
 
-    # Plain per-channel mean slope topomap - well-defined for any n>=1 (for
-    # n=1 it's just that subject's own values), unlike the statistical group
-    # test below which genuinely needs >=2 subjects to estimate variance.
+    demeaned_amp_slopes_by_subject = {
+        subject: _subjectwise_car_demean(slopes) for subject, slopes in amp_slopes_by_subject.items()
+    }
+    demeaned_amp_channels = sorted({ch for subj in demeaned_amp_slopes_by_subject.values() for ch in subj})
+    _write_csv(
+        out_dir / "demeaned_amplitude_slopes_by_subject.csv",
+        fieldnames=["subject", *demeaned_amp_channels],
+        rows=[
+            {"subject": subject, **{ch: slopes.get(ch, "") for ch in demeaned_amp_channels}}
+            for subject, slopes in demeaned_amp_slopes_by_subject.items()
+        ],
+    )
+    print(f"[{band_name}] wrote subject-wise CAR-demeaned amplitude slopes to {out_dir}")
+
     mean_slopes = {
         ch: float(np.mean([slopes_by_subject[s][ch] for s in slopes_by_subject if ch in slopes_by_subject[s]]))
         for ch in channels
@@ -167,10 +214,21 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
     )
     fig.savefig(out_dir / "mean_slope_topomap.png", dpi=150)
     plt.close(fig)
-    print(f"[{band_name}] saved mean slope topomap to {out_dir}")
+    print(f"[{band_name}] saved mean frequency slope topomap to {out_dir}")
 
-    # CAR-style subject-wise demeaning: remove the mean across channels for each
-    # subject, then average the demeaned values across subjects.
+    mean_amp_slopes = {
+        ch: float(np.mean([amp_slopes_by_subject[s][ch] for s in amp_slopes_by_subject if ch in amp_slopes_by_subject[s]]))
+        for ch in amp_channels
+    }
+    fig = plot_slope_topomap(
+        mean_amp_slopes,
+        last_info,
+        title=f"{band_name}: mean amplitude slope (a.u./hour, n={len(amp_slopes_by_subject)})",
+    )
+    fig.savefig(out_dir / "mean_amplitude_slope_topomap.png", dpi=150)
+    plt.close(fig)
+    print(f"[{band_name}] saved mean amplitude slope topomap to {out_dir}")
+
     demeaned_mean_slopes = {
         ch: float(
             np.mean(
@@ -186,31 +244,62 @@ def run_for_band(band_name: str, band_cfg: dict, deriv_root: Path, out_dir: Path
     )
     fig.savefig(out_dir / "mean_slope_car_topomap.png", dpi=150)
     plt.close(fig)
-    print(f"[{band_name}] saved subject-wise CAR-demeaned mean slope topomap to {out_dir}")
+    print(f"[{band_name}] saved CAR-demeaned frequency slope topomap to {out_dir}")
+
+    demeaned_mean_amp_slopes = {
+        ch: float(
+            np.mean(
+                [demeaned_amp_slopes_by_subject[s][ch] for s in demeaned_amp_slopes_by_subject if ch in demeaned_amp_slopes_by_subject[s]]
+            )
+        )
+        for ch in demeaned_amp_channels
+    }
+    fig = plot_slope_topomap(
+        demeaned_mean_amp_slopes,
+        last_info,
+        title=f"{band_name}: mean amplitude slope after subject-wise CAR demeaning (a.u./hour, n={len(demeaned_amp_slopes_by_subject)})",
+    )
+    fig.savefig(out_dir / "mean_amplitude_slope_car_topomap.png", dpi=150)
+    plt.close(fig)
+    print(f"[{band_name}] saved CAR-demeaned amplitude slope topomap to {out_dir}")
 
     if len(slopes_by_subject) < 2:
         print(
             f"[{band_name}] only {len(slopes_by_subject)} subject(s) processed - group_test_slopes "
-            "needs >=2 to fit a t-test per channel, so channel_stats.csv/the pct-positive topomap are skipped."
+            "needs >=2 to fit a t-test per channel, so channel_stats.csv/the pct-positive topomaps are skipped."
         )
         return
 
     print(f"[{band_name}] running group stats on {len(slopes_by_subject)} subject(s)...")
     channel_stats = group_test_slopes(slopes_by_subject)
-
     _write_csv(
         out_dir / "channel_stats.csv",
         fieldnames=["channel", *next(iter(channel_stats.values())).keys()],
         rows=[{"channel": ch, **row} for ch, row in channel_stats.items()],
     )
-    print(f"[{band_name}] wrote channel stats to {out_dir}")
+    print(f"[{band_name}] wrote frequency channel stats to {out_dir}")
+
+    amp_channel_stats = group_test_slopes(amp_slopes_by_subject)
+    _write_csv(
+        out_dir / "amplitude_channel_stats.csv",
+        fieldnames=["channel", *next(iter(amp_channel_stats.values())).keys()],
+        rows=[{"channel": ch, **row} for ch, row in amp_channel_stats.items()],
+    )
+    print(f"[{band_name}] wrote amplitude channel stats to {out_dir}")
 
     fig = plot_pct_significant_topomap(
-        channel_stats, last_info, title=f"{band_name}: % subjects with positive slope"
+        channel_stats, last_info, title=f"{band_name}: % subjects with positive frequency slope"
     )
     fig.savefig(out_dir / "pct_positive_topomap.png", dpi=150)
     plt.close(fig)
-    print(f"[{band_name}] saved pct-positive topomap to {out_dir}")
+    print(f"[{band_name}] saved pct-positive frequency topomap to {out_dir}")
+
+    amp_fig = plot_pct_significant_topomap(
+        amp_channel_stats, last_info, title=f"{band_name}: % subjects with positive amplitude slope"
+    )
+    amp_fig.savefig(out_dir / "pct_positive_amplitude_topomap.png", dpi=150)
+    plt.close(amp_fig)
+    print(f"[{band_name}] saved pct-positive amplitude topomap to {out_dir}")
 
 
 def run_drift_analysis_all(deriv_root: Path, out_root: Path, config_path: Path, band: str | None = None) -> None:

@@ -25,7 +25,7 @@ from eeg_drift.drift import TRACE_DECIMATE_HZ, analysis_window_seconds, fit_drif
 from eeg_drift.features import extract_band_features
 from eeg_drift.qc import flag_outliers
 from eeg_drift.report_text import subject_summary_bullets
-from eeg_drift.viz import plot_inst_freq_traces
+from eeg_drift.viz import plot_inst_amp_traces, plot_inst_freq_traces
 
 
 def _band_trace_figure(raw: mne.io.BaseRaw, band_name: str, band_cfg: dict):
@@ -43,7 +43,6 @@ def _band_trace_figure(raw: mne.io.BaseRaw, band_name: str, band_cfg: dict):
         smooth_window_ms=band_cfg.get("smooth_window_ms", 100.0),
     )
 
-    # inst_freq is shorter than raw.times (edge-trimmed in extract_band_features) - keep the time axis aligned.
     n_trim = features["n_trimmed_start"]
     times_trimmed = raw.times[n_trim : len(raw.times) - n_trim] if n_trim else raw.times
 
@@ -57,6 +56,36 @@ def _band_trace_figure(raw: mne.io.BaseRaw, band_name: str, band_cfg: dict):
         fits[ch] = fit_drift_slope(inst_freq[i], sfreq=TRACE_DECIMATE_HZ, decimate_to_hz=None)
 
     return plot_inst_freq_traces(times_sec, traces, fits, band_name)
+
+
+def _band_amp_trace_figure(raw: mne.io.BaseRaw, band_name: str, band_cfg: dict):
+    channels = [ch for ch in band_cfg.get("channels", []) if ch in raw.ch_names]
+    if not channels:
+        return None
+
+    sfreq = raw.info["sfreq"]
+    features = extract_band_features(
+        raw.get_data(picks=channels),
+        sfreq=sfreq,
+        fmin=band_cfg["fmin"],
+        fmax=band_cfg["fmax"],
+        filter_order=band_cfg.get("filter_order", 4),
+        smooth_window_ms=band_cfg.get("smooth_window_ms", 100.0),
+    )
+
+    n_trim = features["n_trimmed_start"]
+    times_trimmed = raw.times[n_trim : len(raw.times) - n_trim] if n_trim else raw.times
+
+    step = max(1, int(round(sfreq / TRACE_DECIMATE_HZ)))
+    times_sec = times_trimmed[::step]
+    inst_amp = features["inst_amp"][:, ::step]
+
+    traces, fits = {}, {}
+    for i, ch in enumerate(channels):
+        traces[ch] = inst_amp[i]
+        fits[ch] = fit_drift_slope(inst_amp[i], sfreq=TRACE_DECIMATE_HZ, decimate_to_hz=None)
+
+    return plot_inst_amp_traces(times_sec, traces, fits, band_name)
 
 
 def build_subject_report(subject: str, qc_row: dict, deriv_root: Path, bands_cfg: dict, out_dir: Path) -> Path:
@@ -93,8 +122,20 @@ def build_subject_report(subject: str, qc_row: dict, deriv_root: Path, bands_cfg
                         f"decimated trace; thick lines are the robust-regression drift fit, with slope "
                         f"in Hz/hour in the legend."
                     )
-                    report.add_figure(fig, title=f"{band_name}: drift", caption=caption, tags=("drift", band_name))
+                    report.add_figure(fig, title=f"{band_name}: frequency drift", caption=caption, tags=("drift", band_name))
                     plt.close(fig)
+
+                amp_fig = _band_amp_trace_figure(raw_cropped, band_name, band_cfg)
+                if amp_fig is not None:
+                    fmin, fmax = band_cfg["fmin"], band_cfg["fmax"]
+                    caption = (
+                        f"Instantaneous amplitude ({fmin}-{fmax} Hz band, Hilbert envelope) over the "
+                        f"analysis window for this band's representative channels. Thin lines are the "
+                        f"decimated trace; thick lines are the robust-regression drift fit, with slope "
+                        f"in a.u./hour in the legend."
+                    )
+                    report.add_figure(amp_fig, title=f"{band_name}: amplitude drift", caption=caption, tags=("drift", band_name))
+                    plt.close(amp_fig)
         else:
             report.add_html(
                 f"<p>Recording ({raw.times[-1]:.1f}s) shorter than the analysis window "
