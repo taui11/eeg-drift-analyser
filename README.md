@@ -1,3 +1,42 @@
+> ## 🔧 Instantaneous-frequency edge-artifact fix (2026-09-22)
+>
+> The group-average drift trace plot showed a spike right at t=0. Traced it
+> to two separate bugs, both now fixed in `eeg_drift/features.py`:
+>
+> - `smooth_moving_average()` used `np.convolve(mode="same")`, which
+>   implicitly zero-pads outside the array - biased the first/last
+>   ~window/2 smoothed samples toward zero.
+> - Deeper issue found while verifying the above: the raw Hilbert-based
+>   instantaneous frequency itself has occasional physically-nonsensical
+>   values (tens of Hz, negative) within ~20 samples of the filter/Hilbert
+>   boundary on some subjects - not fixable by smoothing, since averaging
+>   can only work with what's there. Added a symmetric edge trim
+>   (`EDGE_TRIM_SEC`, 0.2 s with margin) in `extract_band_features()`,
+>   applied before any averaging/fitting. Checked against all 97 subjects:
+>   zero remaining anomalies post-trim.
+> - `build_reports.py`'s per-subject trace plot now calls
+>   `extract_band_features()` directly instead of duplicating the
+>   bandpass/Hilbert/smooth chain inline, so the fix applies identically
+>   everywhere instead of risking drift between two copies of the same
+>   logic.
+> - On top, `run_drift_analysis.py` now uses a 20% trimmed mean (not a
+>   plain mean) across subjects for the group-average trace plot
+>   specifically, so no single subject's residual transient can pull it.
+>
+> **Doesn't change the statistical conclusion** below - `channel_stats.csv`
+> comes from per-subject slope fits (already correctly edge-trimmed
+> either way), not the group-average trace plot. Best `p_value_fdr` is
+> still ≈0.98 (mu_alpha), i.e. still not FDR-significant. The fix is about
+> correctness of the computation and the group-average visualization, not
+> a changed result.
+>
+> Also found and fixed while on this: `data/raw`, `data/bids`,
+> `data/derivatives`, and a 9.6 GB `data.zip` had all ended up staged for
+> commit at some point (`.git` had ballooned to 7.3 GB). Unstaged
+> everything and locked it down with `.gitignore` - see the Project
+> structure section for what's actually meant to be tracked.
+>
+>
 > ## ✅ First full run (2026-08-22)
 >
 > **What we did:** built a one-command, config-driven pipeline
