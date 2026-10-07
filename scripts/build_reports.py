@@ -18,12 +18,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mne
-import numpy as np
 import pandas as pd
 import yaml
 
 from eeg_drift.drift import TRACE_DECIMATE_HZ, analysis_window_seconds, fit_drift_slope
-from eeg_drift.features import bandpass_filter, instantaneous_frequency, smooth_moving_average
+from eeg_drift.features import extract_band_features
 from eeg_drift.qc import flag_outliers
 from eeg_drift.report_text import subject_summary_bullets
 from eeg_drift.viz import plot_inst_freq_traces
@@ -34,17 +33,23 @@ def _band_trace_figure(raw: mne.io.BaseRaw, band_name: str, band_cfg: dict):
     if not channels:
         return None
 
-    data = raw.get_data(picks=channels)
     sfreq = raw.info["sfreq"]
+    features = extract_band_features(
+        raw.get_data(picks=channels),
+        sfreq=sfreq,
+        fmin=band_cfg["fmin"],
+        fmax=band_cfg["fmax"],
+        filter_order=band_cfg.get("filter_order", 4),
+        smooth_window_ms=band_cfg.get("smooth_window_ms", 100.0),
+    )
 
-    filtered = bandpass_filter(data, sfreq, band_cfg["fmin"], band_cfg["fmax"], order=band_cfg.get("filter_order", 4))
-    inst_freq = instantaneous_frequency(filtered, sfreq)
-    window_samples = int(sfreq * band_cfg.get("smooth_window_ms", 100.0) / 1000.0)
-    inst_freq = smooth_moving_average(inst_freq, window_samples)
+    # inst_freq is shorter than raw.times (edge-trimmed in extract_band_features) - keep the time axis aligned.
+    n_trim = features["n_trimmed_start"]
+    times_trimmed = raw.times[n_trim : len(raw.times) - n_trim] if n_trim else raw.times
 
     step = max(1, int(round(sfreq / TRACE_DECIMATE_HZ)))
-    times_sec = raw.times[::step]
-    inst_freq = inst_freq[:, ::step]
+    times_sec = times_trimmed[::step]
+    inst_freq = features["inst_freq"][:, ::step]
 
     traces, fits = {}, {}
     for i, ch in enumerate(channels):

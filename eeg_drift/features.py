@@ -47,17 +47,45 @@ def instantaneous_power(data: np.ndarray) -> np.ndarray:
 
 
 def smooth_moving_average(data: np.ndarray, window_samples: int) -> np.ndarray:
-    """Centered moving-average smoothing, matching MATLAB's smoothdata(x, 'movmean', window)."""
+    """
+    Centered moving-average smoothing, matching MATLAB's smoothdata(x, 'movmean', window).
+
+    Edge-pads with the boundary value before convolving (equivalent to
+    plain np.convolve(..., mode="same") everywhere except the first/last
+    ~window_samples/2 samples). Plain "same"-mode convolution implicitly
+    zero-pads outside the array, which pulls those edge samples toward
+    zero - e.g. for an ~10 Hz signal, the very first smoothed sample comes
+    out as roughly half the true value instead of ~10 Hz. That artifact
+    survives averaging across subjects (it's systematic, not noise) and,
+    since it sits at the very edge of the time range, is a high-leverage
+    outlier for the drift slope regression - worth fixing at the source
+    rather than trimming it out downstream.
+    """
     window_samples = max(1, int(window_samples))
     if window_samples == 1:
         return data
 
     kernel = np.ones(window_samples) / window_samples
+    pad_left = window_samples // 2
+    pad_right = window_samples - 1 - pad_left
 
     def _smooth_1d(x):
-        return np.convolve(x, kernel, mode="same")
+        x_padded = np.pad(x, (pad_left, pad_right), mode="edge")
+        return np.convolve(x_padded, kernel, mode="valid")
 
     return np.apply_along_axis(_smooth_1d, axis=-1, arr=data)
+
+
+# Hilbert-transform-based instantaneous frequency is unreliable right at
+# the filter/transform boundary - checked across 30 real subjects and
+# found occasional physically-nonsensical values (tens of Hz, or negative)
+# within the first/last ~20 raw samples (~130 ms @ 160 Hz). This is a
+# property of the boundary samples themselves (near-zero analytic-signal
+# amplitude makes phase, and hence its derivative, ill-defined there), not
+# something smoothing's edge handling can fix - averaging can only work
+# with what's there, and edge-padding a genuinely bad boundary sample just
+# replicates it into the output. Trimmed symmetrically with margin.
+EDGE_TRIM_SEC = 0.2
 
 
 def extract_band_features(
@@ -67,13 +95,17 @@ def extract_band_features(
     fmax: float,
     filter_order: int = 4,
     smooth_window_ms: float = 100.0,
+    edge_trim_sec: float = EDGE_TRIM_SEC,
 ) -> dict[str, np.ndarray]:
     """
     Full feature-extraction chain for one band, one array of shape
     (n_channels, n_samples) or (n_samples,).
 
-    Returns dict with 'inst_freq' and 'inst_power', both smoothed,
-    same shape as input.
+    Returns dict with 'inst_freq' and 'inst_power' (smoothed, and trimmed
+    by edge_trim_sec at each end - see EDGE_TRIM_SEC), plus
+    'n_trimmed_start' (samples dropped from the start) so callers that
+    build their own time axis from the original data can stay aligned,
+    e.g. `times[n_trimmed_start : len(times) - n_trimmed_start]`.
     """
     filtered = bandpass_filter(data, sfreq, fmin, fmax, order=filter_order)
 
@@ -84,4 +116,9 @@ def extract_band_features(
     inst_freq = smooth_moving_average(inst_freq, window_samples)
     inst_power = smooth_moving_average(inst_power, window_samples)
 
-    return {"inst_freq": inst_freq, "inst_power": inst_power}
+    n_trim = int(round(sfreq * edge_trim_sec))
+    if n_trim > 0:
+        inst_freq = inst_freq[..., n_trim:-n_trim]
+        inst_power = inst_power[..., n_trim:-n_trim]
+
+    return {"inst_freq": inst_freq, "inst_power": inst_power, "n_trimmed_start": n_trim}
